@@ -30,7 +30,7 @@
 // yazin; https ayarlanmadiysa ws:// kullanin. Yol verilmezse /ws/gateway.
 // Kurulum sayfasindaki "Sunucu Adresi" alanindan cihaz bazinda da
 // degistirilebilir (NVS'ye kaydedilir, bu deger sadece varsayilan).
-#define SERVER_URL_DEFAULT "wss://etiket.SUNUCU-IP.sslip.io/ws/gateway"
+#define SERVER_URL_DEFAULT "wss://etiket.193.33.29.193.sslip.io/ws/gateway"
 
 #define FW_VERSION "2.0.0"
 
