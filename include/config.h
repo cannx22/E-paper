@@ -4,8 +4,8 @@
 // NVS'ye (flash) kaydedilmis WiFi bilgisini dener (/wifi sihirbazindan
 // girilen en son ag); burasi sadece NVS'de hic kayit yoksa (ilk kurulum
 // veya fabrika ayarlarina donus) kullanilan yedek/varsayilan degerdir.
-#define WIFI_SSID     "FNF_TEKNOLOJI"
-#define WIFI_PASSWORD "fnf111213"
+#define WIFI_SSID     ""
+#define WIFI_PASSWORD ""
 #define WIFI_CONNECT_TIMEOUT_MS 10000
 
 // STA baglantisi kurulamazsa acilan yerel kurulum Access Point'i - bu sadece
@@ -15,34 +15,39 @@
 #define AP_SSID     "ESP32-NRF-Gateway"
 #define AP_PASSWORD "12345678" // en az 8 karakter
 
-// http://<MDNS_HOSTNAME>-xxxxxx.local/ adresinden erisim icin (STA ve AP
-// modunda calisir) - burasi da TEMEL isim, gercek adres calisma zamaninda
-// MAC tabanli benzersiz kodla birlestirilir (bkz. main.cpp uniqueSuffix).
-// iOS/Android bazi durumlarda .local'i desteklemeyebilir; o zaman Serial
-// Monitor'deki veya router panelindeki IP adresini kullanin.
+// Kurulum AP'si acikken kayitli bir WiFi agi varsa ve bu sure boyunca kurulum
+// agina kimse baglanmadiysa cihaz yeniden baslayip kayitli agi tekrar dener
+// (elektrik kesintisinden sonra modem gec acilirsa takili kalmasin diye).
+#define AP_RETRY_TIMEOUT_MS (5UL * 60UL * 1000UL)
+
+// Router'in "bagli cihazlar" listesinde gorunen isim - TEMEL isim, sonuna
+// MAC tabanli benzersiz kod eklenir (ornek: "esp32-etiket-a1b2c3").
 #define MDNS_HOSTNAME "esp32-etiket"
 
+// ---- Bulut sunucu (server/ klasoru, Coolify'da calisir) ----
+// Gateway WiFi'ye baglaninca bu adrese WebSocket ile baglanir. Coolify'in
+// verdigi adresi (ornek "https://xxxx.1.2.3.4.sslip.io") buraya wss:// ile
+// yazin; https ayarlanmadiysa ws:// kullanin. Yol verilmezse /ws/gateway.
+// Kurulum sayfasindaki "Sunucu Adresi" alanindan cihaz bazinda da
+// degistirilebilir (NVS'ye kaydedilir, bu deger sadece varsayilan).
+#define SERVER_URL_DEFAULT "wss://etiket.SUNUCU-IP.sslip.io/ws/gateway"
+
+#define FW_VERSION "2.0.0"
+
 // nRF24L01+ SPI pin baglantilari.
-// GECICI TEST: SCK/MOSI/MISO farkli GPIO'lara tasindi (GPIO matrisi uzerinden,
-// varsayilan VSPI IO_MUX pinleri 18/19/23 yerine) - bu pinlerin/kablolamanin
-// sorun olup olmadigini test etmek icin. CE/CSN ayni kaldi.
+// SCK/MISO/MOSI artik ESP32'nin varsayilan VSPI IO_MUX pinlerinde (18/19/23) -
+// GPIO matrisi uzerinden farkli pinlere tasima testi tamamlandi. CE/CSN
+// donanimsal SPI'nin parcasi degil, RF24 kutuphanesinde yazilimla secilen
+// keyfi GPIO'lar oldugu icin degismedi.
 #define NRF_CE_PIN  32
 #define NRF_CSN_PIN 33
-#define NRF_SCK_PIN  14
-#define NRF_MISO_PIN 27
-#define NRF_MOSI_PIN 13
+#define NRF_SCK_PIN  18
+#define NRF_MISO_PIN 19
+#define NRF_MOSI_PIN 23
 
 // nrf24l01_Receiver projesindeki RECEIVER_NRF_ADDR_BYTES ile birebir eslesmeli
 // (Core/Inc/main.h -> RECEIVER_BOARD_ESA / RECEIVER_BOARD_ESB secimine gore)
 #define TARGET_ADDR_ESA "ESA" // 2.13" panel (GDEY0213B74, 122x250)
 #define TARGET_ADDR_ESB "ESB" // 1.54" panel (200x200)
 
-// ---- Kullanici girisi / rol tabanli erisim ----
-// Cihazda hic kayitli kullanici yoksa (ilk kurulum) otomatik olusturulan
-// admin hesabi - ilk giristen sonra admin panelinden sifresi degistirilmeli.
-#define DEFAULT_ADMIN_USERNAME "admin"
-#define DEFAULT_ADMIN_PASSWORD "admin123"
-#define MAX_USERS 8
-#define MAX_SESSIONS 4
-#define SESSION_COOKIE_NAME "esp32session"
-#define SESSION_TIMEOUT_MS (30UL * 60UL * 1000UL) // 30 dakika hareketsizlik
+// Kullanici girisi / rol tabanli erisim artik bulut sunucuda (server/src/auth.js).

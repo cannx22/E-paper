@@ -1,0 +1,41 @@
+<!DOCTYPE html><html lang="tr"><head><meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>G&ouml;nderim Ge&ccedil;mi&#351;i</title>
+<link rel="stylesheet" href="/static/admin.css">
+</head><body>
+<div class="banner">
+  <span class="tag">&#128196;</span>
+  <div>
+    <h1>G&ouml;nderim Ge&ccedil;mi&#351;i</h1>
+    <p>Son 200 etiket g&ouml;nderimi.</p>
+  </div>
+  <nav id="nav" class="nav-links"></nav>
+</div>
+<div class="wrap">
+  <section class="card">
+    <h2>Son G&ouml;nderimler</h2>
+    <div class="table-scroll">
+      <table>
+        <thead><tr><th>Zaman</th><th>Kullan&#305;c&#305;</th><th>Gateway</th><th>Ekran</th><th>&Uuml;r&uuml;n</th><th>Fiyat</th><th>Sonu&ccedil;</th></tr></thead>
+        <tbody id="histBody"><tr><td colspan="7">Y&uuml;kleniyor...</td></tr></tbody>
+      </table>
+    </div>
+  </section>
+</div>
+<script src="/static/common.js"></script>
+<script>
+apiRequest('GET', '/api/history?limit=200').then(function(list){
+  var body = document.getElementById('histBody');
+  if (!list.length){
+    body.innerHTML = '<tr><td colspan="7">Hen&uuml;z g&ouml;nderim yok.</td></tr>';
+    return;
+  }
+  body.innerHTML = list.map(function(h){
+    var result = '<span class="badge ' + (h.ok ? 'online' : 'err') + '">' + (h.ok ? 'Ba&#351;ar&#305;l&#305;' : 'Hata') + '</span> ' + escapeHtml(h.message);
+    return '<tr><td>' + formatDate(h.ts) + '</td><td>' + escapeHtml(h.user) + '</td><td>' + escapeHtml(h.gatewayName) +
+      '</td><td>' + escapeHtml(h.board) + '</td><td>' + escapeHtml(h.name) + '</td><td>' + escapeHtml(h.price) +
+      '</td><td>' + result + '</td></tr>';
+  }).join('');
+});
+</script>
+</body></html>

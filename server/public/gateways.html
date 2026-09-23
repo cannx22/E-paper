@@ -1,0 +1,141 @@
+<!DOCTYPE html><html lang="tr"><head><meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Gateway Y&ouml;netimi</title>
+<link rel="stylesheet" href="/static/admin.css">
+</head><body>
+<div class="banner">
+  <span class="tag">&#128225;</span>
+  <div>
+    <h1>Gateway Y&ouml;netimi</h1>
+    <p>Sunucuya ba&#287;lanan ESP32 gateway'leri onaylay&#305;n ve y&ouml;netin.</p>
+  </div>
+  <nav id="nav" class="nav-links"></nav>
+</div>
+<div class="wrap">
+  <section class="card">
+    <h2>Gateway'ler</h2>
+    <p class="hint">Yeni bir gateway WiFi'ye ba&#287;lan&#305;p sunucuya ilk kez geldi&#287;inde burada <b>Onay Bekliyor</b> olarak g&ouml;r&uuml;n&uuml;r; onaylay&#305;nca etiket g&ouml;nderiminde se&ccedil;ilebilir. Liste 5 saniyede bir yenilenir.</p>
+    <div class="table-scroll">
+      <table>
+        <thead><tr><th>&#304;sim</th><th>Kimlik (MAC)</th><th>Durum</th><th>Ba&#287;lant&#305;</th><th>nRF</th><th>IP / FW</th><th>Son G&ouml;r&uuml;lme</th><th></th></tr></thead>
+        <tbody id="gwBody"><tr><td colspan="8">Y&uuml;kleniyor...</td></tr></tbody>
+      </table>
+    </div>
+    <div id="gwMsg" class="msg"></div>
+  </section>
+
+  <section class="card">
+    <h2>Elle Gateway Ekle</h2>
+    <p class="hint">Gateway'i &ouml;nceden tan&#305;mlamak isterseniz MAC adresini girin (kurulum a&#287;&#305;nda veya Serial Monitor'de yazar). B&ouml;yle eklenen gateway onayl&#305; ba&#351;lar; ilk ba&#287;land&#305;&#287;&#305;nda anahtar&#305; kaydedilir.</p>
+    <form id="addForm">
+      <div class="row">
+        <div>
+          <label for="gwId">Kimlik (MAC, 12 hane)</label>
+          <input type="text" id="gwId" placeholder="A1B2C3D4E5F6" required>
+        </div>
+        <div>
+          <label for="gwName">&#304;sim</label>
+          <input type="text" id="gwName" placeholder="Merkez Ma&#287;aza" maxlength="40">
+        </div>
+      </div>
+      <button type="submit" class="btn-primary">Ekle</button>
+    </form>
+    <div id="addMsg" class="msg"></div>
+  </section>
+</div>
+
+<script src="/static/common.js"></script>
+<script>
+function showMsg(id, ok, text){
+  var el = document.getElementById(id);
+  el.className = 'msg ' + (ok ? 'ok' : 'err');
+  el.textContent = text;
+}
+
+function renderGateways(list){
+  var body = document.getElementById('gwBody');
+  if (!list.length){
+    body.innerHTML = '<tr><td colspan="8">Hen&uuml;z gateway yok. Bir ESP32 WiFi\'ye ba&#287;lan&#305;nca burada g&ouml;r&uuml;necek.</td></tr>';
+    return;
+  }
+  body.innerHTML = list.map(function(g){
+    var status = g.status === 'approved'
+      ? '<span class="badge approved">Onayl&#305;</span>'
+      : '<span class="badge pending">Onay Bekliyor</span>';
+    var online = g.online ? '<span class="badge online">&#9679; &Ccedil;evrimi&ccedil;i</span>' : '<span class="badge offline">&#9675; &Ccedil;evrimd&#305;&#351;&#305;</span>';
+    var nrf = g.nrf === null ? '-' : (g.nrf ? '<span class="badge online">Haz&#305;r</span>' : '<span class="badge err">Yok</span>');
+    var key = g.hasKey ? '' : ' <span class="badge pending" title="&#304;lk ba&#287;lant&#305;da anahtar kaydedilecek">anahtar yok</span>';
+    var id = escapeHtml(g.id);
+    var actions = [];
+    if (g.status !== 'approved') actions.push('<button class="btn-sm ok" data-act="approve" data-id="' + id + '">Onayla</button>');
+    actions.push('<button class="btn-sm" data-act="rename" data-id="' + id + '" data-name="' + escapeHtml(g.name) + '">&#304;sim</button>');
+    if (g.online){
+      actions.push('<button class="btn-sm" data-act="restart" data-id="' + id + '">Yeniden Ba&#351;lat</button>');
+      actions.push('<button class="btn-sm" data-act="wifi_reset" data-id="' + id + '">WiFi S&#305;f&#305;rla</button>');
+    }
+    actions.push('<button class="btn-sm" data-act="reset-key" data-id="' + id + '">Anahtar S&#305;f&#305;rla</button>');
+    actions.push('<button class="btn-sm danger" data-act="delete" data-id="' + id + '">Sil</button>');
+    return '<tr>' +
+      '<td><b>' + escapeHtml(g.name) + '</b></td>' +
+      '<td class="mono">' + id + key + '</td>' +
+      '<td>' + status + '</td>' +
+      '<td>' + online + '</td>' +
+      '<td>' + nrf + '</td>' +
+      '<td class="mono">' + escapeHtml(g.ip || '-') + '<br>' + escapeHtml(g.fw || '') + '</td>' +
+      '<td>' + (g.online ? '&#351;u an' : formatDate(g.lastSeen)) + '</td>' +
+      '<td><div class="actions">' + actions.join('') + '</div></td>' +
+      '</tr>';
+  }).join('');
+}
+
+function refresh(){
+  return apiRequest('GET', '/api/gateways').then(renderGateways).catch(function(err){
+    showMsg('gwMsg', false, err.message);
+  });
+}
+
+var CONFIRMS = {
+  'restart': 'Gateway yeniden başlatılsın mı?',
+  'wifi_reset': 'Gateway\'in kayıtlı WiFi bilgisi silinsin mi? Cihaz kurulum ağını (ESP32-NRF-Gateway-xxxx) açacak ve yerinde yeniden WiFi kurulumu gerekecek.',
+  'reset-key': 'Anahtar sıfırlansın mı? Gateway\'in bir sonraki bağlantısındaki anahtar kabul edilecek (cihazın flash\'ı silindiyse gerekir).',
+  'delete': 'Gateway silinsin mi? Tekrar bağlanırsa onay bekleyen olarak yeniden görünür.'
+};
+
+document.getElementById('gwBody').addEventListener('click', function(e){
+  var btn = e.target.closest('button[data-act]');
+  if (!btn) return;
+  var act = btn.dataset.act, id = btn.dataset.id;
+  var base = '/api/gateways/' + encodeURIComponent(id);
+  var req;
+  if (CONFIRMS[act] && !confirm(CONFIRMS[act])) return;
+  if (act === 'approve') req = apiRequest('POST', base + '/approve', {});
+  else if (act === 'rename'){
+    var name = prompt('Gateway ismi:', btn.dataset.name);
+    if (!name) return;
+    req = apiRequest('POST', base + '/rename', {name: name});
+  }
+  else if (act === 'restart' || act === 'wifi_reset') req = apiRequest('POST', base + '/command', {command: act});
+  else if (act === 'reset-key') req = apiRequest('POST', base + '/reset-key', {});
+  else if (act === 'delete') req = apiRequest('DELETE', base);
+  req.then(function(){
+    document.getElementById('gwMsg').className = 'msg';
+    return refresh();
+  }).catch(function(err){ showMsg('gwMsg', false, err.message); });
+});
+
+document.getElementById('addForm').addEventListener('submit', function(e){
+  e.preventDefault();
+  apiRequest('POST', '/api/gateways', {
+    id: document.getElementById('gwId').value,
+    name: document.getElementById('gwName').value
+  }).then(function(){
+    showMsg('addMsg', true, 'Gateway eklendi.');
+    e.target.reset();
+    refresh();
+  }).catch(function(err){ showMsg('addMsg', false, err.message); });
+});
+
+refresh();
+setInterval(refresh, 5000);
+</script>
+</body></html>

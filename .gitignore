@@ -1,0 +1,4 @@
+.pio/
+.vscode/
+server/node_modules/
+server/data/

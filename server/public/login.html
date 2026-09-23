@@ -1,0 +1,50 @@
+<!DOCTYPE html><html lang="tr"><head><meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Giris Yap</title>
+<style>
+:root{
+  --red:#d62828; --red-dark:#b71c1c; --red-darker:#8e0000;
+  --bg:#fff2f2; --card:#ffffff; --border:#e0b3b3;
+  --text:#2b2b2b; --muted:#7f8c8d;
+}
+*{box-sizing:border-box;}
+body{
+  font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;
+  background:var(--bg); color:var(--text); margin:0; padding:0;
+  display:flex; align-items:center; justify-content:center; min-height:100vh;
+}
+.card{background:var(--card); border:2px solid var(--red); border-radius:10px; padding:28px 26px; width:100%; max-width:340px;}
+.card h1{color:var(--red-dark); font-size:18px; margin:0 0 4px;}
+.card p.hint{color:var(--muted); font-size:12px; margin:0 0 18px;}
+label{display:block; font-size:13px; font-weight:600; margin:12px 0 5px;}
+input[type=text],input[type=password]{
+  width:100%; padding:9px 10px; border:1px solid var(--border); border-radius:6px; font-size:14px;
+}
+button{
+  width:100%; margin-top:18px; padding:10px; background:var(--red); color:#fff; border:none;
+  border-radius:6px; font-size:14px; font-weight:700; cursor:pointer;
+}
+button:hover{background:var(--red-dark);}
+.error{display:none; background:#f8d7da; color:#7a1c25; border:1px solid #edb9bf; border-radius:6px; padding:8px 10px; font-size:13px; margin-bottom:6px;}
+</style></head><body>
+<form class="card" method="POST" action="/login">
+  <h1>&#127991;&#65039; E-Paper Raf Etiketleri</h1>
+  <p class="hint">Devam etmek icin giris yapin.</p>
+  <div class="error" id="loginError"></div>
+  <label for="username">Kullanici Adi</label>
+  <input type="text" id="username" name="username" autocomplete="username" required>
+  <label for="password">Sifre</label>
+  <input type="password" id="password" name="password" autocomplete="current-password" required>
+  <button type="submit">Giris Yap</button>
+</form>
+<script>
+var err = new URLSearchParams(location.search).get('err');
+if (err){
+  var el = document.getElementById('loginError');
+  el.textContent = err === 'limit'
+    ? 'Cok fazla hatali deneme. 15 dakika sonra tekrar deneyin.'
+    : 'Hatali kullanici adi veya sifre.';
+  el.style.display = 'block';
+}
+</script>
+</body></html>
