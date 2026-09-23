@@ -1,54 +1,105 @@
-# E-Paper Etiket Sunucusu
+# E-Paper Yönetim Sunucusu
 
 ESP32 gateway'ler WiFi'ye bağlanınca bu sunucuya WebSocket ile bağlanır (`/ws/gateway`).
 Etiketler tarayıcıdan bu sunucu üzerinden gönderilir:
 
 ```
 Tarayıcı ──HTTPS──> Sunucu (Coolify) ──wss──> ESP32 Gateway ──nRF24──> E-paper etiket
+                         │
+                     PostgreSQL
 ```
+
+## Kavramlar
+
+- **Bayi:** Sistemin kiracısıdır. Her gateway ve kullanıcı bir bayiye aittir.
+- **Şube:** Opsiyoneldir. Şube kullanmayan bayi doğrudan bayi seviyesinde çalışır.
+- **Roller:**
+
+  | Rol | Yetki |
+  |---|---|
+  | Merkezi Yönetici | Her şey |
+  | Bayi Yöneticisi | Kendi bayisi, şubeleri, gateway'leri ve kullanıcıları |
+  | Şube Yöneticisi | Sadece kendi şubesi |
+  | Operatör | Etiket gönderir ve geçmişi görür, ayarlara erişemez |
+
+- **Gateway durumları:**
+
+  | Durum | Anlamı |
+  |---|---|
+  | Beklemede | Sunucuya bağlandı ama merkezde kaydı yok |
+  | Kayıtlı | Merkezde kayıtlı, sahiplenme kodu var |
+  | Bağlantı Bekleniyor | Bayiye atandı, henüz doğrulanmış bağlantı kurmadı |
+  | Aktif | Bayiye atanmış ve bağlantısı doğrulanmış |
+  | Offline | Aktif ama şu an bağlı değil |
+  | Hata | Bağlı ama nRF veya donanım hatası bildiriyor |
+  | Devre Dışı | Elle kapatıldı, etiket gönderilemez |
 
 ## Coolify'a kurulum
 
-1. **Repoyu GitHub'a yükleyin** (bu klasörün bulunduğu repo; özel repo olabilir).
-2. Coolify'da **Project → + New → Resource → Private Repository (GitHub App)** (veya public
-   ise *Public Repository*) seçip repoyu ve dalı seçin.
-3. Ayarlar:
+1. **PostgreSQL:** Coolify'da **+ New → Database → PostgreSQL** ile bir veritabanı oluşturup
+   başlatın. Veritabanı sayfasındaki **Postgres URL (internal)** değerini kopyalayın
+   (`postgres://...@<isim>:5432/postgres` gibi).
+2. **Uygulama:** **+ New → Resource → Public Repository**. Repo
+   `https://github.com/cannx22/E-paper`, dal `master`.
    - **Build Pack:** `Dockerfile`
    - **Base Directory:** `/server`
    - **Ports Exposes:** `3000`
-4. **Domains:** Coolify otomatik olarak `http://<rastgele>.<sunucu-ip>.sslip.io` verir. Bunu
-   `https://etiket.<sunucu-ip>.sslip.io` gibi değiştirin. `https://` yazınca Coolify Let's
-   Encrypt sertifikasını kendisi alır.
-5. **Environment Variables:**
-   - `ADMIN_PASSWORD`: ilk admin hesabının şifresi (kullanıcı adı `admin`, `ADMIN_USERNAME`
-     ile değiştirilebilir). Verilmezse rastgele bir şifre üretilip deploy loglarına yazılır.
-     Bu değişken sadece hiç kullanıcı yokken, yani ilk açılışta kullanılır.
-6. **Persistent Storage:** yeni bir volume ekleyin, **Destination Path:** `/app/data`.
-   Kullanıcılar, gateway'ler ve gönderim geçmişi burada tutulur. Volume eklenmezse her
-   deploy'da bu bilgiler silinir.
-7. **Deploy**'a basın. `https://etiket.<sunucu-ip>.sslip.io/healthz` adresi `ok` dönmeli.
+   - **Domain:** `https://etiket.<sunucu-ip>.sslip.io`
+3. **Environment Variables:**
 
-## Gateway'i bağlama
+   | Değişken | Açıklama |
+   |---|---|
+   | `DATABASE_URL` | 1. adımda kopyalanan internal URL (zorunlu) |
+   | `ADMIN_PASSWORD` | İlk merkezi yönetici şifresi, kullanıcı adı `admin`. Sadece veritabanında hiç kullanıcı yokken kullanılır. |
+   | `PUBLIC_URL` | İsteğe bağlı. QR kodlarındaki adres, örneğin `https://etiket.<sunucu-ip>.sslip.io`. Verilmezse isteğin geldiği adres kullanılır. |
 
-1. `include/config.h` içindeki `SERVER_URL_DEFAULT` değerini sunucu adresinizle değiştirin:
-   `wss://etiket.<sunucu-ip>.sslip.io/ws/gateway`. Domain `http://` ise `ws://` yazın.
-2. Firmware'i ESP32'ye yükleyin.
-3. ESP32'yi çalıştırın. Kayıtlı WiFi yoksa `ESP32-NRF-Gateway-XXXXXX` ağını açar (şifre
-   `12345678`). Bu ağa bağlanınca kurulum sayfası açılır; açılmazsa `http://192.168.4.1`
-   adresine gidin. İşyeri WiFi'sini seçip kaydedin. Sunucu adresi alanı boş kalırsa
-   `config.h`'daki varsayılan adres kullanılır.
-4. Panelde **Gateway'ler** sayfasına girin. Cihaz **Onay Bekliyor** olarak görünür;
-   **Onayla**'ya basın.
-5. **Etiket Gönder** sayfasında gateway'i ve ekranı (ESA/ESB) seçip gönderin.
+4. **Persistent Storage:** `/app/data` volume'unu koruyun. Önceki sürümden kalan
+   `db.json` ilk açılışta PostgreSQL'e otomatik aktarılır ve dosyanın adı
+   `db.json.imported` olarak değiştirilir.
+5. **Deploy**'a basın. `https://.../healthz` adresi `ok` dönmeli; bu kontrol veritabanı
+   bağlantısını da doğrular.
+
+Veritabanı şeması `src/db/migrations/` altındaki SQL dosyalarıyla yönetilir. Sunucu her
+açılışta uygulanmamış migration'ları sırayla çalıştırır. Yeni fazlar yeni dosya olarak
+eklenir, mevcut dosyalar değiştirilmez.
+
+## Gateway'i sisteme ekleme
+
+1. **Merkez:** Gateway'i bir kez elektriğe ve internete bağlayın. Gateway'ler sayfasında
+   **Beklemede** olarak görünür; **Kaydet**'e basın. Gateway'i henüz bağlamadan kaydetmek
+   isterseniz **Merkezde Elle Kaydet** alanına MAC adresini yazın.
+2. **Merkez:** **QR Etiket**'e basın, çıkan etiketi yazdırıp gateway'in üzerine yapıştırın.
+3. **Bayi yöneticisi:** QR'ı telefon kamerasıyla okutun. Sahiplenme sayfası açılır;
+   isim ve şube seçip onaylayın. QR yoksa Gateway'ler → **Gateway Ekle** alanına kimliği
+   ve kodu yazın.
+4. Gateway internete bağlıysa hemen **Aktif** olur. Bağlı değilse **Bağlantı Bekleniyor**
+   durumunda kalır ve ilk bağlantıda Aktif olur.
+
+Merkez, **Bayiye Ata** ile QR kullanmadan da doğrudan atama yapabilir.
 
 ## Yerel geliştirme
 
 ```
 cd server
 npm install
+set DATABASE_URL=postgres://postgres:sifre@localhost:5432/etiket
 set ADMIN_PASSWORD=admin123
 npm start          # http://localhost:3000
 ```
 
-Yerel testte gateway'in bilgisayara bağlanması için kurulum sayfasındaki sunucu adresine
+Gateway'in yereldeki sunucuya bağlanması için kurulum sayfasındaki sunucu adresine
 `ws://<bilgisayarın-yerel-ip>:3000` yazın.
+
+## Yol haritası
+
+| Faz | Kapsam | Durum |
+|---|---|---|
+| 1 | PostgreSQL, bayi/şube, roller, gateway yaşam döngüsü, QR sahiplenme, telemetri, işlem logu, özet | ✅ |
+| 2 | E-paper cihaz kaydı (ID ile adresleme, barkod/QR, Excel toplu ekleme), ekran modelleri | |
+| 3 | Kalıcı güncelleme kuyruğu (offline bekletme, tekrar deneme, toplu güncelleme, durum adımları) | |
+| 4 | Ürün/içerik yönetimi ve cihaz ↔ ürün eşleştirme | |
+| 5 | Şablon motoru, dinamik alanlar, sunucuda bitmap üretimi | |
+| 6 | Tasarım editörü | |
+| 7 | Zamanlama | |
+| 8 | Dış API, ERP entegrasyonu, stok uyarıları | |
+| 9 | Gelişmiş dashboard, gateway OTA güncelleme | |

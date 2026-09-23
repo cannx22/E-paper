@@ -228,7 +228,7 @@ input:focus{outline:none; border:2px solid var(--red); padding:7px;}
       <li>A&#351;a&#287;&#305;daki listeden kendi ev/i&#351;yeri WiFi a&#287;&#305;n&#305;z&#305; se&#231;in (ya da elle yaz&#305;n).</li>
       <li>&#350;ifrenizi girin ve <b>"Kaydet ve Yeniden Ba&#351;lat"</b> butonuna bas&#305;n.</li>
       <li>Cihaz birka&#231; saniye i&ccedil;inde yeniden ba&#351;lay&#305;p se&ccedil;ti&#287;iniz a&#287;a ba&#287;lanacak ve internet &uuml;zerinden sunucuya ba&#287;lanacak.</li>
-      <li>Sunucu panelinde <b>Gateway'ler</b> sayfas&#305;nda bu cihaz (kimlik: <b id="gwIdText">...</b>) <b>Onay Bekliyor</b> olarak g&ouml;r&uuml;n&uuml;r; onaylay&#305;nca etiket g&ouml;nderebilirsiniz.</li>
+      <li>Gateway'i hesab&#305;n&#305;za eklemek i&ccedil;in &uuml;zerindeki QR kodu okutun ya da panelde <b>Gateway'ler &rarr; Gateway Ekle</b> alan&#305;na kimli&#287;i (<b id="gwIdText">...</b>) ve sahiplenme kodunu yaz&#305;n. Gateway internete ba&#287;lan&#305;nca <b>Aktif</b> olur.</li>
     </ol>
   </section>
 

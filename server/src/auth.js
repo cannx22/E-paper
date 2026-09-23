@@ -1,15 +1,16 @@
-// Kullanici girisi / rol tabanli erisim. Firmware'deki eski yerel paneldeki
-// mantigin sunucu karsiligi: sifreler tuzlu scrypt hash olarak db.json'da,
-// oturumlar sadece RAM'de (sunucu yeniden baslarsa herkes tekrar giris yapar).
+// Kullanici girisi ve oturumlar. Sifreler tuzlu scrypt hash, oturumlar
+// veritabaninda (sessions tablosu, token'in SHA-256 ozeti) tutulur.
 const crypto = require('crypto');
 const db = require('./db');
+const { can } = require('./permissions');
 
-const ROLE_USER = 'user';
-const ROLE_ADMIN = 'admin';
 const SESSION_COOKIE = 'gwsession';
 const SESSION_TIMEOUT_MS = 8 * 60 * 60 * 1000; // 8 saat hareketsizlik
+const ACTIVITY_WRITE_INTERVAL_MS = 60 * 1000;  // last_activity en fazla dakikada bir yazilir
 
-const sessions = new Map(); // token -> { username, role, lastActivity }
+function sha256(s) {
+  return crypto.createHash('sha256').update(s).digest('hex');
+}
 
 function hashPassword(password, salt = crypto.randomBytes(16).toString('hex')) {
   const hash = crypto.scryptSync(password, salt, 64).toString('hex');
@@ -17,44 +18,47 @@ function hashPassword(password, salt = crypto.randomBytes(16).toString('hex')) {
 }
 
 function verifyPassword(user, password) {
-  const { hash } = hashPassword(password, user.salt);
-  return crypto.timingSafeEqual(Buffer.from(hash, 'hex'), Buffer.from(user.hash, 'hex'));
+  const { hash } = hashPassword(password, user.password_salt);
+  const a = Buffer.from(hash, 'hex');
+  const b = Buffer.from(user.password_hash, 'hex');
+  return a.length === b.length && crypto.timingSafeEqual(a, b);
 }
 
-function createUser(username, password, role) {
+async function createUser(client, { username, password, role, dealerId = null, branchId = null }) {
   const { salt, hash } = hashPassword(password);
-  return db.addUser({ username, salt, hash, role, createdAt: new Date().toISOString() });
+  const r = await client.query(
+    `INSERT INTO users (username, password_salt, password_hash, role, dealer_id, branch_id)
+     VALUES ($1, $2, $3, $4, $5, $6) RETURNING id`,
+    [username, salt, hash, role, dealerId, branchId],
+  );
+  return r.rows[0].id;
 }
 
-function setPassword(username, password) {
-  const user = db.findUser(username);
-  if (!user) return false;
-  Object.assign(user, hashPassword(password));
-  db.save();
+async function setPassword(userId, password) {
+  const { salt, hash } = hashPassword(password);
+  await db.query('UPDATE users SET password_salt = $1, password_hash = $2 WHERE id = $3', [salt, hash, userId]);
   // Sifresi degisen kullanicinin acik oturumlarini kapat.
-  for (const [token, s] of sessions) {
-    if (s.username === username) sessions.delete(token);
-  }
-  return true;
+  await db.query('DELETE FROM sessions WHERE user_id = $1', [userId]);
 }
 
-// Hic kullanici yoksa ilk admin hesabini olustur. Sunucu internete acik
-// oldugu icin sabit "admin123" yerine ADMIN_PASSWORD ortam degiskeni
-// kullanilir; verilmemisse rastgele bir sifre uretilip loglara yazilir.
-function ensureDefaultAdmin() {
-  if (db.listUsers().length > 0) return;
+// Hic kullanici yoksa ilk merkezi yonetici hesabini olustur. Sunucu internete
+// acik oldugu icin sabit sifre yerine ADMIN_PASSWORD kullanilir; verilmemisse
+// rastgele bir sifre uretilip loglara yazilir.
+async function ensureDefaultAdmin() {
+  const row = await db.one('SELECT count(*)::int AS n FROM users');
+  if (row.n > 0) return;
   const username = process.env.ADMIN_USERNAME || 'admin';
   let password = process.env.ADMIN_PASSWORD;
   if (!password) {
     password = crypto.randomBytes(9).toString('base64url');
     console.log('==================================================');
-    console.log(' Ilk admin hesabi olusturuldu');
+    console.log(' Ilk merkezi yonetici hesabi olusturuldu');
     console.log(`   kullanici: ${username}`);
     console.log(`   sifre    : ${password}`);
     console.log(' (ADMIN_PASSWORD ortam degiskeni ile belirleyebilirsiniz)');
     console.log('==================================================');
   }
-  createUser(username, password, ROLE_ADMIN);
+  await createUser(db, { username, password, role: 'super_admin' });
 }
 
 function parseCookies(header) {
@@ -68,88 +72,108 @@ function parseCookies(header) {
   return out;
 }
 
-function createSession(res, req, user) {
+async function createSession(res, req, user) {
   const token = crypto.randomBytes(32).toString('hex');
-  sessions.set(token, { username: user.username, role: user.role, lastActivity: Date.now() });
+  await db.query('INSERT INTO sessions (token_hash, user_id) VALUES ($1, $2)', [sha256(token), user.id]);
+  await db.query('UPDATE users SET last_login_at = now() WHERE id = $1', [user.id]);
   const secure = req.secure ? '; Secure' : '';
   res.setHeader('Set-Cookie', `${SESSION_COOKIE}=${token}; Path=/; HttpOnly; SameSite=Lax${secure}`);
 }
 
-function destroySession(req, res) {
+async function destroySession(req, res) {
   const token = parseCookies(req.headers.cookie)[SESSION_COOKIE];
-  if (token) sessions.delete(token);
+  if (token) await db.query('DELETE FROM sessions WHERE token_hash = $1', [sha256(token)]);
   res.setHeader('Set-Cookie', `${SESSION_COOKIE}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0`);
 }
 
-function getSession(req) {
+// Gecerli oturumun kullanicisini doner. Kullanici, bayisi veya subesi pasif
+// yapildiysa oturum gecersiz sayilir.
+async function getSession(req) {
   const token = parseCookies(req.headers.cookie)[SESSION_COOKIE];
   if (!token) return null;
-  const s = sessions.get(token);
-  if (!s) return null;
-  if (Date.now() - s.lastActivity > SESSION_TIMEOUT_MS) {
-    sessions.delete(token);
+  const tokenHash = sha256(token);
+  const row = await db.one(
+    `SELECT s.last_activity, u.id, u.username, u.role, u.dealer_id, u.branch_id, u.active,
+            d.name AS dealer_name, d.active AS dealer_active,
+            b.name AS branch_name, b.active AS branch_active
+       FROM sessions s
+       JOIN users u ON u.id = s.user_id
+       LEFT JOIN dealers d ON d.id = u.dealer_id
+       LEFT JOIN branches b ON b.id = u.branch_id
+      WHERE s.token_hash = $1`,
+    [tokenHash],
+  );
+  if (!row) return null;
+  const idleMs = Date.now() - new Date(row.last_activity).getTime();
+  const blocked = !row.active || row.dealer_active === false || row.branch_active === false;
+  if (idleMs > SESSION_TIMEOUT_MS || blocked) {
+    await db.query('DELETE FROM sessions WHERE token_hash = $1', [tokenHash]);
     return null;
   }
-  // Silinen kullanicinin oturumu gecersiz; rol degistiyse guncel rolu kullan.
-  const user = db.findUser(s.username);
-  if (!user) {
-    sessions.delete(token);
-    return null;
+  if (idleMs > ACTIVITY_WRITE_INTERVAL_MS) {
+    await db.query('UPDATE sessions SET last_activity = now() WHERE token_hash = $1', [tokenHash]);
   }
-  s.role = user.role;
-  s.lastActivity = Date.now();
-  return s;
+  return {
+    id: row.id,
+    username: row.username,
+    role: row.role,
+    dealer_id: row.dealer_id,
+    branch_id: row.branch_id,
+    dealer_name: row.dealer_name,
+    branch_name: row.branch_name,
+  };
 }
 
-// Sayfa istekleri icin: giris yoksa /login'e yonlendirir.
-function requirePage(minRole) {
-  return (req, res, next) => {
-    const s = getSession(req);
-    if (!s) return res.redirect('/login');
-    if (minRole === ROLE_ADMIN && s.role !== ROLE_ADMIN) {
+// Sayfa istekleri icin: giris yoksa /login'e (donus adresiyle) yonlendirir.
+function requirePage(action) {
+  return async (req, res, next) => {
+    const user = await getSession(req);
+    if (!user) return res.redirect('/login?next=' + encodeURIComponent(req.originalUrl));
+    if (action && !can(user, action)) {
       return res.status(403).type('text').send('HATA: Bu sayfa icin yetkiniz yok.');
     }
-    req.user = s;
+    req.user = user;
     next();
   };
 }
 
 // fetch ile cagrilan /api/* istekleri icin: yonlendirme yerine 401/403 metni.
-function requireApi(minRole) {
-  return (req, res, next) => {
-    const s = getSession(req);
-    if (!s) return res.status(401).type('text').send('HATA: Giris yapmalisiniz.');
-    if (minRole === ROLE_ADMIN && s.role !== ROLE_ADMIN) {
+function requireApi(action) {
+  return async (req, res, next) => {
+    const user = await getSession(req);
+    if (!user) return res.status(401).type('text').send('HATA: Giris yapmalisiniz.');
+    if (action && !can(user, action)) {
       return res.status(403).type('text').send('HATA: Bu islem icin yetkiniz yok.');
     }
-    req.user = s;
+    req.user = user;
     next();
   };
 }
 
-// Kaba kuvvet denemelerine karsi IP basina basit giris denemesi siniri.
-const loginAttempts = new Map(); // ip -> { count, resetAt }
-const LOGIN_MAX_ATTEMPTS = 10;
-const LOGIN_WINDOW_MS = 15 * 60 * 1000;
+// Kaba kuvvet denemelerine karsi anahtar (IP veya kullanici) basina deneme siniri.
+function createLimiter(maxAttempts, windowMs) {
+  const attempts = new Map(); // key -> { count, resetAt }
+  return {
+    allowed(key) {
+      const a = attempts.get(key);
+      return !a || a.resetAt < Date.now() || a.count < maxAttempts;
+    },
+    fail(key) {
+      const now = Date.now();
+      const a = attempts.get(key);
+      if (!a || a.resetAt < now) attempts.set(key, { count: 1, resetAt: now + windowMs });
+      else a.count++;
+    },
+    clear(key) { attempts.delete(key); },
+  };
+}
 
-function loginAllowed(ip) {
-  const now = Date.now();
-  const a = loginAttempts.get(ip);
-  if (!a || a.resetAt < now) return true;
-  return a.count < LOGIN_MAX_ATTEMPTS;
-}
-function recordLoginFailure(ip) {
-  const now = Date.now();
-  const a = loginAttempts.get(ip);
-  if (!a || a.resetAt < now) loginAttempts.set(ip, { count: 1, resetAt: now + LOGIN_WINDOW_MS });
-  else a.count++;
-}
-function clearLoginFailures(ip) { loginAttempts.delete(ip); }
+// Eski oturumlari periyodik olarak temizle.
+setInterval(() => {
+  db.query(`DELETE FROM sessions WHERE last_activity < now() - interval '1 day'`).catch(() => {});
+}, 60 * 60 * 1000).unref();
 
 module.exports = {
-  ROLE_USER, ROLE_ADMIN,
-  createUser, setPassword, verifyPassword, ensureDefaultAdmin,
-  createSession, destroySession, getSession,
-  requirePage, requireApi,
-  loginAllowed, recordLoginFailure, clearLoginFailures,
+  sha256, hashPassword, verifyPassword, createUser, setPassword, ensureDefaultAdmin,
+  createSession, destroySession, getSession, requirePage, requireApi, createLimiter,
 };

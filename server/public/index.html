@@ -263,24 +263,27 @@ function updateGatewayStatus(){
   var el = document.getElementById('gatewayStatus');
   var g = gatewayList.filter(function(x){ return x.id === gatewaySelect.value; })[0];
   if (!g){ el.className = ''; el.textContent = ''; return; }
+  var scope = g.dealerName ? ' · ' + g.dealerName + (g.branchName ? ' / ' + g.branchName : '') : '';
   if (!g.online){
     el.className = 'offline';
-    el.textContent = '○ Çevrimdışı - son görülme: ' + formatDate(g.lastSeen);
-  } else if (!g.nrf){
+    el.textContent = '○ Çevrimdışı - son görülme: ' + formatDate(g.lastSeen) + scope;
+  } else if (g.status === 'error'){
     el.className = 'offline';
-    el.textContent = '● Çevrimiçi ama nRF24 modülü hazır değil';
+    el.textContent = '● Çevrimiçi ama hata var: ' + (g.lastError || 'nRF24 modülü hazır değil') + scope;
   } else {
     el.className = 'online';
-    el.textContent = '● Çevrimiçi';
+    el.textContent = '● Çevrimiçi' + scope;
   }
 }
 
 function loadGateways(){
   return apiRequest('GET', '/api/gateways').then(function(list){
-    gatewayList = list.filter(function(g){ return g.status === 'approved'; });
+    // Etiket gonderilebilen gateway'ler: aktif olanlar (cevrimdisi/hatali
+    // olsa da listede kalir, durumu altta gosterilir).
+    gatewayList = list.filter(function(g){ return g.state === 'active'; });
     var selected = gatewaySelect.value || localStorage.getItem(GATEWAY_KEY) || '';
     if (!gatewayList.length){
-      gatewaySelect.innerHTML = '<option value="">(onaylı gateway yok)</option>';
+      gatewaySelect.innerHTML = '<option value="">(aktif gateway yok)</option>';
     } else {
       gatewaySelect.innerHTML = gatewayList.map(function(g){
         return '<option value="' + escapeHtml(g.id) + '">' + (g.online ? '● ' : '○ ') +

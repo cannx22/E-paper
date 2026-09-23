@@ -31,18 +31,21 @@ button:hover{background:var(--red-dark);}
   <h1>&#127991;&#65039; E-Paper Raf Etiketleri</h1>
   <p class="hint">Devam etmek icin giris yapin.</p>
   <div class="error" id="loginError"></div>
-  <label for="username">Kullanici Adi</label>
+  <input type="hidden" name="next" id="nextInput">
+  <label for="username">Kullanici Adi / E-posta</label>
   <input type="text" id="username" name="username" autocomplete="username" required>
   <label for="password">Sifre</label>
   <input type="password" id="password" name="password" autocomplete="current-password" required>
   <button type="submit">Giris Yap</button>
 </form>
 <script>
-var err = new URLSearchParams(location.search).get('err');
+var params = new URLSearchParams(location.search);
+document.getElementById('nextInput').value = params.get('next') || '/';
+var err = params.get('err');
 if (err){
   var el = document.getElementById('loginError');
-  el.textContent = err === 'limit'
-    ? 'Cok fazla hatali deneme. 15 dakika sonra tekrar deneyin.'
+  el.textContent = err === 'limit' ? 'Cok fazla hatali deneme. 15 dakika sonra tekrar deneyin.'
+    : err === 'inactive' ? 'Hesabiniz (veya bayiniz/subeniz) pasif durumda. Yoneticinize basvurun.'
     : 'Hatali kullanici adi veya sifre.';
   el.style.display = 'block';
 }

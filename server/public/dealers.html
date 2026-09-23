@@ -1,0 +1,78 @@
+<!DOCTYPE html><html lang="tr"><head><meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bayiler</title>
+<link rel="stylesheet" href="/static/admin.css">
+</head><body>
+<div class="banner">
+  <span class="tag">&#127970;</span>
+  <div>
+    <h1>Bayi Y&ouml;netimi</h1>
+    <p>Bayileri olu&#351;turun, aktif/pasif yap&#305;n.</p>
+  </div>
+  <nav id="nav" class="nav-links"></nav>
+</div>
+<div class="wrap">
+  <section class="card">
+    <h2>Bayiler</h2>
+    <p class="hint">Pasif yap&#305;lan bayinin kullan&#305;c&#305;lar&#305; giri&#351; yapamaz. Gateway atamak i&ccedil;in <a href="/gateways">Gateway'ler</a>, kullan&#305;c&#305; eklemek i&ccedil;in <a href="/users">Kullan&#305;c&#305;lar</a>, &#351;ube eklemek i&ccedil;in <a href="/branches">&#350;ubeler</a> sayfas&#305;n&#305; kullan&#305;n.</p>
+    <div class="table-scroll">
+      <table>
+        <thead><tr><th>Bayi</th><th>Durum</th><th>&#350;ube</th><th>Gateway</th><th>Kullan&#305;c&#305;</th><th>Olu&#351;turulma</th><th></th></tr></thead>
+        <tbody id="body"><tr><td colspan="7">Y&uuml;kleniyor...</td></tr></tbody>
+      </table>
+    </div>
+    <div id="listMsg" class="msg"></div>
+  </section>
+  <section class="card">
+    <h2>Yeni Bayi</h2>
+    <form id="addForm">
+      <label for="name">Bayi Ad&#305;</label>
+      <input type="text" id="name" maxlength="60" required placeholder="ABC Market">
+      <button type="submit" class="btn-primary">Olu&#351;tur</button>
+    </form>
+    <div id="addMsg" class="msg"></div>
+  </section>
+</div>
+<script src="/static/common.js"></script>
+<script>
+var dealers = [];
+function refresh(){
+  return apiRequest('GET', '/api/dealers').then(function(list){
+    dealers = list;
+    document.getElementById('body').innerHTML = list.length ? list.map(function(d){
+      return '<tr><td><b>' + escapeHtml(d.name) + '</b></td>' +
+        '<td>' + (d.active ? '<span class="badge online">Aktif</span>' : '<span class="badge inactive">Pasif</span>') + '</td>' +
+        '<td>' + d.branch_count + '</td><td>' + d.gateway_count + '</td><td>' + d.user_count + '</td>' +
+        '<td>' + formatDate(d.created_at) + '</td>' +
+        '<td><div class="actions">' +
+        '<button class="btn-sm" data-act="rename" data-id="' + d.id + '">&#304;sim</button>' +
+        '<button class="btn-sm ' + (d.active ? 'danger' : 'ok') + '" data-act="toggle" data-id="' + d.id + '">' + (d.active ? 'Pasif Yap' : 'Aktif Yap') + '</button>' +
+        '</div></td></tr>';
+    }).join('') : '<tr><td colspan="7">Hen&uuml;z bayi yok.</td></tr>';
+  }).catch(function(err){ showMsg('listMsg', false, err.message); });
+}
+document.getElementById('body').addEventListener('click', function(e){
+  var btn = e.target.closest('button[data-act]');
+  if (!btn) return;
+  var d = dealers.filter(function(x){ return String(x.id) === btn.dataset.id; })[0];
+  var body;
+  if (btn.dataset.act === 'rename'){
+    var name = prompt('Bayi adı:', d.name);
+    if (!name) return;
+    body = {name: name};
+  } else {
+    if (d.active && !confirm(d.name + ' pasif yapılsın mı? Bayinin kullanıcıları giriş yapamayacak.')) return;
+    body = {active: !d.active};
+  }
+  apiRequest('POST', '/api/dealers/' + d.id, body).then(function(){ hideMsg('listMsg'); refresh(); })
+    .catch(function(err){ showMsg('listMsg', false, err.message); });
+});
+document.getElementById('addForm').addEventListener('submit', function(e){
+  e.preventDefault();
+  apiRequest('POST', '/api/dealers', {name: document.getElementById('name').value}).then(function(d){
+    showMsg('addMsg', true, d.name + ' oluşturuldu.'); e.target.reset(); refresh();
+  }).catch(function(err){ showMsg('addMsg', false, err.message); });
+});
+refresh();
+</script>
+</body></html>

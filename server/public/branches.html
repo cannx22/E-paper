@@ -1,0 +1,101 @@
+<!DOCTYPE html><html lang="tr"><head><meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>&#350;ubeler</title>
+<link rel="stylesheet" href="/static/admin.css">
+</head><body>
+<div class="banner">
+  <span class="tag">&#127980;</span>
+  <div>
+    <h1>&#350;ube Y&ouml;netimi</h1>
+    <p>&#350;ube kullan&#305;m&#305; iste&#287;e ba&#287;l&#305;d&#305;r; k&uuml;&ccedil;&uuml;k i&#351;letmeler do&#287;rudan bayi seviyesinde &ccedil;al&#305;&#351;abilir.</p>
+  </div>
+  <nav id="nav" class="nav-links"></nav>
+</div>
+<div class="wrap">
+  <section class="card">
+    <h2>&#350;ubeler</h2>
+    <div class="filters" id="dealerFilterWrap" style="display:none;">
+      <select id="dealerFilter"></select>
+    </div>
+    <div class="table-scroll">
+      <table>
+        <thead><tr><th>&#350;ube</th><th>Bayi</th><th>Durum</th><th>Gateway</th><th>Kullan&#305;c&#305;</th><th></th></tr></thead>
+        <tbody id="body"><tr><td colspan="6">Y&uuml;kleniyor...</td></tr></tbody>
+      </table>
+    </div>
+    <div id="listMsg" class="msg"></div>
+  </section>
+  <section class="card">
+    <h2>Yeni &#350;ube</h2>
+    <form id="addForm">
+      <div class="row">
+        <div id="addDealerWrap" style="display:none;"><label for="addDealer">Bayi</label><select id="addDealer"></select></div>
+        <div><label for="name">&#350;ube Ad&#305;</label><input type="text" id="name" maxlength="60" required placeholder="Kayseri &#350;ube"></div>
+      </div>
+      <button type="submit" class="btn-primary">Olu&#351;tur</button>
+    </form>
+    <div id="addMsg" class="msg"></div>
+  </section>
+</div>
+<script src="/static/common.js"></script>
+<script>
+var branches = [];
+var isSuper = false;
+function refresh(){
+  var dealerId = isSuper ? document.getElementById('dealerFilter').value : '';
+  return apiRequest('GET', '/api/branches' + (dealerId ? '?dealerId=' + dealerId : '')).then(function(list){
+    branches = list;
+    document.getElementById('body').innerHTML = list.length ? list.map(function(b){
+      return '<tr><td><b>' + escapeHtml(b.name) + '</b></td><td>' + escapeHtml(b.dealer_name) + '</td>' +
+        '<td>' + (b.active ? '<span class="badge online">Aktif</span>' : '<span class="badge inactive">Pasif</span>') + '</td>' +
+        '<td>' + b.gateway_count + '</td><td>' + b.user_count + '</td>' +
+        '<td><div class="actions">' +
+        '<button class="btn-sm" data-act="rename" data-id="' + b.id + '">&#304;sim</button>' +
+        '<button class="btn-sm" data-act="toggle" data-id="' + b.id + '">' + (b.active ? 'Pasif Yap' : 'Aktif Yap') + '</button>' +
+        '<button class="btn-sm danger" data-act="delete" data-id="' + b.id + '">Sil</button>' +
+        '</div></td></tr>';
+    }).join('') : '<tr><td colspan="6">Hen&uuml;z &#351;ube yok.</td></tr>';
+  }).catch(function(err){ showMsg('listMsg', false, err.message); });
+}
+document.getElementById('body').addEventListener('click', function(e){
+  var btn = e.target.closest('button[data-act]');
+  if (!btn) return;
+  var b = branches.filter(function(x){ return String(x.id) === btn.dataset.id; })[0];
+  var req;
+  if (btn.dataset.act === 'rename'){
+    var name = prompt('Şube adı:', b.name);
+    if (!name) return;
+    req = apiRequest('POST', '/api/branches/' + b.id, {name: name});
+  } else if (btn.dataset.act === 'toggle'){
+    req = apiRequest('POST', '/api/branches/' + b.id, {active: !b.active});
+  } else {
+    if (!confirm(b.name + ' silinsin mi? Şubenin gateway\'leri bayi seviyesine taşınır.')) return;
+    req = apiRequest('DELETE', '/api/branches/' + b.id);
+  }
+  req.then(function(){ hideMsg('listMsg'); refresh(); }).catch(function(err){ showMsg('listMsg', false, err.message); });
+});
+document.getElementById('dealerFilter').addEventListener('change', refresh);
+document.getElementById('addForm').addEventListener('submit', function(e){
+  e.preventDefault();
+  apiRequest('POST', '/api/branches', {
+    dealerId: isSuper ? document.getElementById('addDealer').value : undefined,
+    name: document.getElementById('name').value
+  }).then(function(b){
+    showMsg('addMsg', true, b.name + ' oluşturuldu.');
+    document.getElementById('name').value = '';
+    refresh();
+  }).catch(function(err){ showMsg('addMsg', false, err.message); });
+});
+meReady.then(function(me){
+  isSuper = me.role === 'super_admin';
+  if (!isSuper) return refresh();
+  return apiRequest('GET', '/api/dealers').then(function(dealers){
+    document.getElementById('dealerFilterWrap').style.display = 'flex';
+    document.getElementById('addDealerWrap').style.display = 'block';
+    fillSelect(document.getElementById('dealerFilter'), dealers, 'Tüm bayiler');
+    fillSelect(document.getElementById('addDealer'), dealers, 'Bayi seçin');
+    return refresh();
+  });
+});
+</script>
+</body></html>

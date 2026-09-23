@@ -32,7 +32,7 @@
 // degistirilebilir (NVS'ye kaydedilir, bu deger sadece varsayilan).
 #define SERVER_URL_DEFAULT "wss://etiket.193.33.29.193.sslip.io/ws/gateway"
 
-#define FW_VERSION "2.0.0"
+#define FW_VERSION "2.1.0"
 
 // nRF24L01+ SPI pin baglantilari.
 // SCK/MISO/MOSI artik ESP32'nin varsayilan VSPI IO_MUX pinlerinde (18/19/23) -

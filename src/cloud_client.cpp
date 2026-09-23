@@ -1,8 +1,11 @@
 #include "cloud_client.h"
+#include <WiFi.h>
 #include <WebSocketsClient.h>
 
 static const char *DEFAULT_WS_PATH = "/ws/gateway";
 static const uint32_t RECONNECT_INTERVAL_MS = 5000;
+// Panelde calisma suresi / WiFi sinyali / bos bellek / hata durumu icin.
+static const uint32_t TELEMETRY_INTERVAL_MS = 60000;
 // Sunucu anahtari reddettiyse (bad_secret) her 5 sn'de bir denemek yerine
 // seyrek dene - admin panelden "Anahtar Sifirla" yapilinca kendiliginden baglanir.
 static const uint32_t REJECTED_RECONNECT_INTERVAL_MS = 60000;
@@ -12,6 +15,8 @@ static CloudConfig g_cfg;
 static CloudSendHandler g_onSend = nullptr;
 static CloudCommandHandler g_onCommand = nullptr;
 static bool g_connected = false;
+static bool g_telemetryDue = false;
+static unsigned long g_lastTelemetryMillis = 0;
 
 // nRF gonderimi ~1 sn surebilir; WebSocket olay callback'i icinde degil,
 // CloudClient_Loop() icinde (ws.loop() dondukten sonra) yapiyoruz.
@@ -61,6 +66,19 @@ static void sendHello() {
     sendJson(doc);
 }
 
+static void sendTelemetry() {
+    JsonDocument doc;
+    doc["type"] = "telemetry";
+    doc["uptime"] = millis() / 1000;
+    doc["rssi"] = WiFi.RSSI();
+    doc["ssid"] = WiFi.SSID();
+    doc["heap"] = ESP.getFreeHeap();
+    doc["nrf"] = g_cfg.nrfReady;
+    doc["error"] = g_cfg.nrfReady ? "" : "nRF24 modulu baslatilamadi (kablo/pin baglantisini kontrol edin)";
+    sendJson(doc);
+    g_lastTelemetryMillis = millis();
+}
+
 static void sendResult(const String &reqId, bool ok, const String &message) {
     JsonDocument doc;
     doc["type"] = "result";
@@ -82,10 +100,17 @@ static void handleMessage(uint8_t *payload, size_t length) {
         String status = doc["status"] | "";
         String name = doc["name"] | "";
         ws.setReconnectInterval(RECONNECT_INTERVAL_MS);
+        const char *label =
+            status == "active"     ? "AKTIF" :
+            status == "pending"    ? "BEKLEMEDE (merkez panelden kaydedilmeli)" :
+            status == "registered" ? "KAYITLI (bayi hesabina eklenmeli - QR/sahiplenme kodu)" :
+            status == "awaiting"   ? "BAGLANTI BEKLENIYOR" :
+            status == "disabled"   ? "DEVRE DISI" : status.c_str();
         Serial.print("[bulut] durum: ");
-        Serial.print(status == "approved" ? "ONAYLI" : "ONAY BEKLIYOR (admin panelden onaylayin)");
+        Serial.print(label);
         Serial.print(" - isim: ");
         Serial.println(name);
+        if (type == "hello_ack") g_telemetryDue = true;
     } else if (type == "send") {
         if (g_hasPendingJob) {
             sendResult(doc["reqId"] | "", false, "HATA: Gateway mesgul, onceki gonderim suruyor.");
@@ -170,6 +195,11 @@ void CloudClient_Loop() {
         g_pendingJob.clear();
         g_hasPendingJob = false;
         sendResult(reqId, ok, message);
+    }
+
+    if (g_connected && (g_telemetryDue || millis() - g_lastTelemetryMillis > TELEMETRY_INTERVAL_MS)) {
+        g_telemetryDue = false;
+        sendTelemetry();
     }
 
     if (g_pendingCommand.length() > 0) {

@@ -1,0 +1,76 @@
+<!DOCTYPE html><html lang="tr"><head><meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>&Ouml;zet</title>
+<link rel="stylesheet" href="/static/admin.css">
+</head><body>
+<div class="banner">
+  <span class="tag">&#128202;</span>
+  <div>
+    <h1>Genel Bak&#305;&#351;</h1>
+    <p id="scopeText">Kapsam&#305;n&#305;zdaki sistemin durumu. 15 saniyede bir yenilenir.</p>
+  </div>
+  <nav id="nav" class="nav-links"></nav>
+</div>
+<div class="wrap" style="max-width:1100px;">
+  <div class="stats" id="stats"></div>
+  <section class="card">
+    <h2>Gateway Durumlar&#305;</h2>
+    <div class="stats" id="gwStats" style="margin-bottom:0;"></div>
+  </section>
+  <section class="card">
+    <h2>Offline / Hatal&#305; Gateway'ler</h2>
+    <div class="table-scroll">
+      <table>
+        <thead><tr><th>Gateway</th><th>Durum</th><th>Bayi / &#350;ube</th><th>Son G&ouml;r&uuml;lme</th><th>Hata</th></tr></thead>
+        <tbody id="problemBody"><tr><td colspan="5">Y&uuml;kleniyor...</td></tr></tbody>
+      </table>
+    </div>
+  </section>
+  <section class="card">
+    <h2>Son Ba&#351;ar&#305;s&#305;z &#304;&#351;lemler</h2>
+    <div class="table-scroll">
+      <table>
+        <thead><tr><th>Zaman</th><th>Kullan&#305;c&#305;</th><th>&#304;&#351;lem</th><th>Kaynak</th><th>Mesaj</th></tr></thead>
+        <tbody id="failBody"><tr><td colspan="5">Y&uuml;kleniyor...</td></tr></tbody>
+      </table>
+    </div>
+  </section>
+</div>
+<script src="/static/common.js"></script>
+<script src="/static/audit-labels.js"></script>
+<script>
+function stat(v, l){ return '<div class="stat"><div class="v">' + v + '</div><div class="l">' + l + '</div></div>'; }
+
+function refresh(){
+  apiRequest('GET', '/api/dashboard').then(function(d){
+    var c = d.counts, html = '';
+    if (c.dealers !== undefined) html += stat(c.dealers, 'Bayi');
+    html += stat(c.branches, '&#350;ube') + stat(c.gateways, 'Gateway') + stat(c.users, 'Kullan&#305;c&#305;');
+    html += stat(d.sends24h.ok, 'Ba&#351;ar&#305;l&#305; g&ouml;nderim (24s)') + stat(d.sends24h.failed, 'Ba&#351;ar&#305;s&#305;z g&ouml;nderim (24s)');
+    document.getElementById('stats').innerHTML = html;
+    var order = ['active', 'offline', 'error', 'awaiting', 'registered', 'pending', 'disabled'];
+    document.getElementById('gwStats').innerHTML = order.map(function(s){
+      return '<div class="stat"><div class="v">' + d.gatewaysByStatus[s] + '</div><div class="l"><span class="badge st-' + s + '">' + escapeHtml(d.statusLabels[s]) + '</span></div></div>';
+    }).join('');
+    document.getElementById('problemBody').innerHTML = d.problemGateways.length ? d.problemGateways.map(function(g){
+      return '<tr><td><b>' + escapeHtml(g.name) + '</b><br><span class="mono small">' + escapeHtml(g.id) + '</span></td>' +
+        '<td><span class="badge st-' + g.status + '">' + escapeHtml(g.statusLabel) + '</span></td>' +
+        '<td>' + escapeHtml(g.dealerName || '-') + (g.branchName ? ' / ' + escapeHtml(g.branchName) : '') + '</td>' +
+        '<td>' + formatDate(g.lastSeen) + '</td><td>' + escapeHtml(g.lastError || '') + '</td></tr>';
+    }).join('') : '<tr><td colspan="5">Sorunlu gateway yok. &#9989;</td></tr>';
+  });
+  apiRequest('GET', '/api/audit?type=failed&limit=10').then(function(list){
+    document.getElementById('failBody').innerHTML = list.length ? list.map(function(a){
+      return '<tr><td>' + formatDate(a.created_at) + '</td><td>' + escapeHtml(a.username || '-') + '</td>' +
+        '<td>' + escapeHtml(auditActionLabel(a.action)) + '</td><td>' + escapeHtml(a.gateway_name || a.entity_id || '-') + '</td>' +
+        '<td>' + escapeHtml(a.message || '') + '</td></tr>';
+    }).join('') : '<tr><td colspan="5">Ba&#351;ar&#305;s&#305;z i&#351;lem yok.</td></tr>';
+  });
+}
+meReady.then(function(me){
+  if (me.dealerName) document.getElementById('scopeText').textContent = me.dealerName + (me.branchName ? ' / ' + me.branchName : '') + ' - 15 saniyede bir yenilenir.';
+  refresh();
+});
+setInterval(refresh, 15000);
+</script>
+</body></html>

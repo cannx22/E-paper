@@ -1,0 +1,38 @@
+<!DOCTYPE html><html lang="tr"><head><meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Gateway QR Etiketi</title>
+<style>
+body{font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif; margin:20px; color:#222;}
+.label{width:62mm; border:1px dashed #999; padding:4mm; text-align:center;}
+.label img{width:40mm; height:40mm;}
+.label .t{font-weight:800; font-size:13px; margin-bottom:2mm;}
+.label .id{font-family:Consolas,"Courier New",monospace; font-size:12px; margin-top:2mm;}
+.label .code{font-family:Consolas,"Courier New",monospace; font-size:15px; font-weight:800; letter-spacing:.08em;}
+.label .hint{font-size:9px; color:#555; margin-top:1mm;}
+.tools{margin-bottom:14px;}
+.tools button{padding:8px 16px; background:#d62828; color:#fff; border:none; border-radius:6px; font-weight:700; cursor:pointer;}
+#err{color:#8e0000;}
+@media print{ .tools{display:none;} body{margin:0;} .label{border:none;} }
+</style>
+</head><body>
+<div class="tools"><button onclick="window.print()">Yazd&#305;r</button> <span id="err"></span></div>
+<div class="label" id="label" style="display:none;">
+  <div class="t">E-Paper Gateway</div>
+  <img id="qr" alt="QR">
+  <div class="id" id="gwId"></div>
+  <div class="code" id="gwCode"></div>
+  <div class="hint">QR'&#305; okutun veya kimlik + kodu panelde &quot;Gateway Ekle&quot; alan&#305;na yaz&#305;n.</div>
+</div>
+<script>
+var id = decodeURIComponent(location.pathname.split('/')[2] || '');
+fetch('/api/gateways/' + encodeURIComponent(id) + '/label-info').then(function(r){
+  return r.ok ? r.json() : r.text().then(function(t){ throw new Error(t); });
+}).then(function(info){
+  if (!info.claimCode) throw new Error('Bu gateway icin gecerli bir sahiplenme kodu yok (gateway zaten bir bayiye atanmis olabilir).');
+  document.getElementById('gwId').textContent = 'ID: ' + info.id;
+  document.getElementById('gwCode').textContent = info.claimCode;
+  document.getElementById('qr').src = '/api/gateways/' + encodeURIComponent(info.id) + '/qr.svg?t=' + Date.now();
+  document.getElementById('label').style.display = 'block';
+}).catch(function(err){ document.getElementById('err').textContent = err.message; });
+</script>
+</body></html>

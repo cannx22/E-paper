@@ -1,41 +1,74 @@
 <!DOCTYPE html><html lang="tr"><head><meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>G&ouml;nderim Ge&ccedil;mi&#351;i</title>
+<title>&#304;&#351;lem Ge&ccedil;mi&#351;i</title>
 <link rel="stylesheet" href="/static/admin.css">
 </head><body>
 <div class="banner">
   <span class="tag">&#128196;</span>
   <div>
-    <h1>G&ouml;nderim Ge&ccedil;mi&#351;i</h1>
-    <p>Son 200 etiket g&ouml;nderimi.</p>
+    <h1>&#304;&#351;lem Ge&ccedil;mi&#351;i</h1>
+    <p>Etiket g&ouml;nderimleri ve y&ouml;netim i&#351;lemleri.</p>
   </div>
   <nav id="nav" class="nav-links"></nav>
 </div>
-<div class="wrap">
+<div class="wrap" style="max-width:1200px;">
   <section class="card">
-    <h2>Son G&ouml;nderimler</h2>
+    <div class="filters">
+      <select id="typeFilter">
+        <option value="">T&uuml;m i&#351;lemler</option>
+        <option value="labels">Sadece etiket g&ouml;nderimleri</option>
+        <option value="admin">Sadece y&ouml;netim i&#351;lemleri</option>
+        <option value="failed">Sadece ba&#351;ar&#305;s&#305;zlar</option>
+      </select>
+    </div>
     <div class="table-scroll">
       <table>
-        <thead><tr><th>Zaman</th><th>Kullan&#305;c&#305;</th><th>Gateway</th><th>Ekran</th><th>&Uuml;r&uuml;n</th><th>Fiyat</th><th>Sonu&ccedil;</th></tr></thead>
+        <thead><tr><th>Zaman</th><th>Kullan&#305;c&#305;</th><th>&#304;&#351;lem</th><th>Kaynak</th><th>Bayi / &#350;ube</th><th>&#304;&ccedil;erik</th><th>Sonu&ccedil;</th></tr></thead>
         <tbody id="histBody"><tr><td colspan="7">Y&uuml;kleniyor...</td></tr></tbody>
       </table>
     </div>
+    <div style="text-align:center;"><button type="button" class="btn-primary" id="moreBtn" style="display:none;">Daha Fazla</button></div>
   </section>
 </div>
 <script src="/static/common.js"></script>
+<script src="/static/audit-labels.js"></script>
 <script>
-apiRequest('GET', '/api/history?limit=200').then(function(list){
-  var body = document.getElementById('histBody');
-  if (!list.length){
-    body.innerHTML = '<tr><td colspan="7">Hen&uuml;z g&ouml;nderim yok.</td></tr>';
-    return;
+var PAGE = 100, lastId = null;
+
+function contentText(a){
+  var d = a.details;
+  if (a.action === 'label.send' && d && d.fields){
+    var f = d.fields;
+    return [d.board, f.business, f.name, f.price ? f.price + ' ' + (f.unit || '') : ''].filter(Boolean).join(' · ');
   }
-  body.innerHTML = list.map(function(h){
-    var result = '<span class="badge ' + (h.ok ? 'online' : 'err') + '">' + (h.ok ? 'Ba&#351;ar&#305;l&#305;' : 'Hata') + '</span> ' + escapeHtml(h.message);
-    return '<tr><td>' + formatDate(h.ts) + '</td><td>' + escapeHtml(h.user) + '</td><td>' + escapeHtml(h.gatewayName) +
-      '</td><td>' + escapeHtml(h.board) + '</td><td>' + escapeHtml(h.name) + '</td><td>' + escapeHtml(h.price) +
-      '</td><td>' + result + '</td></tr>';
-  }).join('');
-});
+  if (d && d.before !== undefined && d.after !== undefined) return JSON.stringify(d.before) + ' → ' + JSON.stringify(d.after);
+  return a.message || '';
+}
+
+function row(a){
+  var result = '<span class="badge ' + (a.success ? 'online' : 'err') + '">' + (a.success ? 'Ba&#351;ar&#305;l&#305;' : 'Hata') + '</span>';
+  if (a.action === 'label.send' && a.message) result += ' <span class="small">' + escapeHtml(a.message) + '</span>';
+  var entity = a.gateway_name ? escapeHtml(a.gateway_name) + '<br><span class="mono small">' + escapeHtml(a.entity_id) + '</span>' : escapeHtml(a.entity_id || '-');
+  return '<tr><td>' + formatDate(a.created_at) + '</td><td>' + escapeHtml(a.username || '-') + '</td>' +
+    '<td>' + escapeHtml(auditActionLabel(a.action)) + '</td><td>' + entity + '</td>' +
+    '<td>' + escapeHtml(a.dealer_name || '-') + (a.branch_name ? ' / ' + escapeHtml(a.branch_name) : '') + '</td>' +
+    '<td>' + escapeHtml(contentText(a)) + '</td><td>' + result + '</td></tr>';
+}
+
+function load(reset){
+  var type = document.getElementById('typeFilter').value;
+  var url = '/api/audit?limit=' + PAGE + (type ? '&type=' + type : '') + (!reset && lastId ? '&before=' + lastId : '');
+  apiRequest('GET', url).then(function(list){
+    var body = document.getElementById('histBody');
+    if (reset) body.innerHTML = '';
+    if (reset && !list.length) body.innerHTML = '<tr><td colspan="7">Kay&#305;t yok.</td></tr>';
+    body.insertAdjacentHTML('beforeend', list.map(row).join(''));
+    if (list.length) lastId = list[list.length - 1].id;
+    document.getElementById('moreBtn').style.display = list.length === PAGE ? 'inline-block' : 'none';
+  });
+}
+document.getElementById('typeFilter').addEventListener('change', function(){ lastId = null; load(true); });
+document.getElementById('moreBtn').addEventListener('click', function(){ load(false); });
+load(true);
 </script>
 </body></html>

@@ -7,42 +7,35 @@
   <span class="tag">&#128101;</span>
   <div>
     <h1>Kullan&#305;c&#305; Y&ouml;netimi</h1>
-    <p>Admin ve kullan&#305;c&#305; hesaplar&#305;n&#305; buradan y&ouml;netin.</p>
+    <p>Kullan&#305;c&#305;lar yaln&#305;zca kendi bayi/&#351;ube kapsamlar&#305;ndaki kaynaklar&#305; g&ouml;r&uuml;r.</p>
   </div>
   <nav id="nav" class="nav-links"></nav>
 </div>
-<div class="wrap">
+<div class="wrap" style="max-width:1100px;">
   <section class="card">
-    <h2>Mevcut Kullan&#305;c&#305;lar</h2>
+    <h2>Kullan&#305;c&#305;lar</h2>
     <div class="table-scroll">
       <table>
-        <thead><tr><th>Kullan&#305;c&#305; Ad&#305;</th><th>Rol</th><th>Olu&#351;turulma</th><th></th></tr></thead>
-        <tbody id="userBody"><tr><td colspan="4">Y&uuml;kleniyor...</td></tr></tbody>
+        <thead><tr><th>Kullan&#305;c&#305;</th><th>Rol</th><th>Bayi / &#350;ube</th><th>Durum</th><th>Son Giri&#351;</th><th></th></tr></thead>
+        <tbody id="userBody"><tr><td colspan="6">Y&uuml;kleniyor...</td></tr></tbody>
       </table>
     </div>
     <div id="userMsg" class="msg"></div>
   </section>
 
   <section class="card">
-    <h2>Yeni Kullan&#305;c&#305; Ekle</h2>
+    <h2>Yeni Kullan&#305;c&#305;</h2>
     <form id="addForm">
       <div class="row">
-        <div>
-          <label for="newUsername">Kullan&#305;c&#305; Ad&#305;</label>
-          <input type="text" id="newUsername" required>
-        </div>
-        <div>
-          <label for="newPassword">&#350;ifre (en az 6 karakter)</label>
-          <input type="password" id="newPassword" required>
-        </div>
-        <div>
-          <label for="newRole">Rol</label>
-          <select id="newRole">
-            <option value="user">Kullan&#305;c&#305; (sadece etiket g&ouml;nderme)</option>
-            <option value="admin">Admin (her &#351;ey + y&ouml;netim)</option>
-          </select>
-        </div>
+        <div><label for="newUsername">Kullan&#305;c&#305; Ad&#305; / E-posta</label><input type="text" id="newUsername" required></div>
+        <div><label for="newPassword">&#350;ifre (en az 6 karakter)</label><input type="password" id="newPassword" required autocomplete="new-password"></div>
+        <div><label for="newRole">Rol</label><select id="newRole"></select></div>
       </div>
+      <div class="row">
+        <div id="dealerWrap"><label for="newDealer">Bayi</label><select id="newDealer"></select></div>
+        <div id="branchWrap"><label for="newBranch">&#350;ube</label><select id="newBranch"></select></div>
+      </div>
+      <p class="small" id="roleHint"></p>
       <button type="submit" class="btn-primary">Kullan&#305;c&#305; Ekle</button>
     </form>
     <div id="addMsg" class="msg"></div>
@@ -52,14 +45,8 @@
     <h2>Kendi &#350;ifremi De&#287;i&#351;tir</h2>
     <form id="pwForm">
       <div class="row">
-        <div>
-          <label for="curPw">Mevcut &#350;ifre</label>
-          <input type="password" id="curPw" required autocomplete="current-password">
-        </div>
-        <div>
-          <label for="newPw">Yeni &#350;ifre</label>
-          <input type="password" id="newPw" required autocomplete="new-password">
-        </div>
+        <div><label for="curPw">Mevcut &#350;ifre</label><input type="password" id="curPw" required autocomplete="current-password"></div>
+        <div><label for="newPw">Yeni &#350;ifre</label><input type="password" id="newPw" required autocomplete="new-password"></div>
       </div>
       <button type="submit" class="btn-primary">&#350;ifreyi De&#287;i&#351;tir</button>
     </form>
@@ -69,43 +56,68 @@
 
 <script src="/static/common.js"></script>
 <script>
-function showMsg(id, ok, text){
-  var el = document.getElementById(id);
-  el.className = 'msg ' + (ok ? 'ok' : 'err');
-  el.textContent = text;
-}
+var ROLE_INFO = {
+  super_admin: {label: 'Merkezi Yönetici', level: 4, hint: 'Tüm bayileri, gateway\'leri ve kullanıcıları yönetir.'},
+  dealer_admin: {label: 'Bayi Yöneticisi', level: 3, hint: 'Kendi bayisini, şubelerini, gateway\'lerini ve kullanıcılarını yönetir.'},
+  branch_admin: {label: 'Şube Yöneticisi', level: 2, hint: 'Sadece kendi şubesindeki gateway\'leri ve kullanıcıları yönetir.'},
+  operator: {label: 'Operatör', level: 1, hint: 'Etiket gönderir ve geçmişi görür; ayarlara erişemez. Şube seçilirse sadece o şubeyi görür.'}
+};
+var users = [], dealers = [], branches = [];
 
 function refresh(){
   return apiRequest('GET', '/api/users').then(function(list){
+    users = list;
     document.getElementById('userBody').innerHTML = list.map(function(u){
-      var name = escapeHtml(u.username);
-      var role = u.role === 'admin' ? '<span class="role-admin">Admin</span>' : '<span class="role-user">Kullan&#305;c&#305;</span>';
-      return '<tr><td><b>' + name + '</b></td><td>' + role + '</td><td>' + formatDate(u.createdAt) + '</td>' +
-        '<td><div class="actions">' +
-        '<button class="btn-sm" data-act="password" data-user="' + name + '">&#350;ifre S&#305;f&#305;rla</button>' +
-        '<button class="btn-sm danger" data-act="delete" data-user="' + name + '">Sil</button>' +
-        '</div></td></tr>';
+      var scope = u.dealer_name ? escapeHtml(u.dealer_name) + (u.branch_name ? '<br><span class="small">' + escapeHtml(u.branch_name) + '</span>' : '') : '<span class="small">merkez</span>';
+      var self = u.id === currentUser.id;
+      var actions = self ? '<span class="small">(siz)</span>' :
+        '<button class="btn-sm" data-act="password" data-id="' + u.id + '">&#350;ifre S&#305;f&#305;rla</button>' +
+        '<button class="btn-sm" data-act="toggle" data-id="' + u.id + '">' + (u.active ? 'Pasif Yap' : 'Aktif Yap') + '</button>' +
+        '<button class="btn-sm danger" data-act="delete" data-id="' + u.id + '">Sil</button>';
+      return '<tr><td><b>' + escapeHtml(u.username) + '</b></td>' +
+        '<td class="' + (u.role === 'super_admin' || u.role === 'dealer_admin' ? 'role-admin' : 'role-user') + '">' + escapeHtml(u.role_label) + '</td>' +
+        '<td>' + scope + '</td>' +
+        '<td>' + (u.active ? '<span class="badge online">Aktif</span>' : '<span class="badge inactive">Pasif</span>') + '</td>' +
+        '<td>' + formatDate(u.last_login_at) + '</td>' +
+        '<td><div class="actions">' + actions + '</div></td></tr>';
     }).join('');
   }).catch(function(err){ showMsg('userMsg', false, err.message); });
 }
 
+// Rol secimine gore bayi/sube alanlarini goster/gizle ve doldur.
+function updateScopeFields(){
+  var me = currentUser, role = document.getElementById('newRole').value;
+  var isSuper = me.role === 'super_admin';
+  document.getElementById('roleHint').textContent = ROLE_INFO[role] ? ROLE_INFO[role].hint : '';
+  document.getElementById('dealerWrap').style.display = isSuper && role !== 'super_admin' ? 'block' : 'none';
+  var dealerId = isSuper ? document.getElementById('newDealer').value : me.dealerId;
+  var showBranch = (role === 'branch_admin' || role === 'operator') && !me.branchId;
+  document.getElementById('branchWrap').style.display = showBranch ? 'block' : 'none';
+  if (showBranch){
+    var list = branches.filter(function(b){ return String(b.dealer_id) === String(dealerId); });
+    var prev = document.getElementById('newBranch').value;
+    fillSelect(document.getElementById('newBranch'), list, role === 'branch_admin' ? 'Şube seçin' : '(tüm bayi)', prev);
+  }
+}
+document.getElementById('newRole').addEventListener('change', updateScopeFields);
+document.getElementById('newDealer').addEventListener('change', updateScopeFields);
+
 document.getElementById('userBody').addEventListener('click', function(e){
   var btn = e.target.closest('button[data-act]');
   if (!btn) return;
-  var user = btn.dataset.user;
-  var base = '/api/users/' + encodeURIComponent(user);
-  var req;
+  var u = users.filter(function(x){ return String(x.id) === btn.dataset.id; })[0];
+  var base = '/api/users/' + u.id, req;
   if (btn.dataset.act === 'password'){
-    var pw = prompt(user + ' için yeni şifre (en az 6 karakter):');
+    var pw = prompt(u.username + ' için yeni şifre (en az 6 karakter):');
     if (!pw) return;
     req = apiRequest('POST', base + '/password', {password: pw}).then(function(){
-      showMsg('userMsg', true, user + ' kullanıcısının şifresi değiştirildi.');
+      showMsg('userMsg', true, u.username + ' kullanıcısının şifresi değiştirildi.');
     });
+  } else if (btn.dataset.act === 'toggle'){
+    req = apiRequest('POST', base + '/active', {active: !u.active}).then(function(){ hideMsg('userMsg'); });
   } else {
-    if (!confirm(user + ' silinsin mi?')) return;
-    req = apiRequest('DELETE', base).then(function(){
-      document.getElementById('userMsg').className = 'msg';
-    });
+    if (!confirm(u.username + ' silinsin mi?')) return;
+    req = apiRequest('DELETE', base).then(function(){ hideMsg('userMsg'); });
   }
   req.then(refresh).catch(function(err){ showMsg('userMsg', false, err.message); });
 });
@@ -115,10 +127,13 @@ document.getElementById('addForm').addEventListener('submit', function(e){
   apiRequest('POST', '/api/users', {
     username: document.getElementById('newUsername').value,
     password: document.getElementById('newPassword').value,
-    role: document.getElementById('newRole').value
+    role: document.getElementById('newRole').value,
+    dealerId: document.getElementById('newDealer').value || null,
+    branchId: document.getElementById('branchWrap').style.display === 'none' ? null : (document.getElementById('newBranch').value || null)
   }).then(function(){
     showMsg('addMsg', true, 'Kullanıcı eklendi.');
-    e.target.reset();
+    document.getElementById('newUsername').value = '';
+    document.getElementById('newPassword').value = '';
     refresh();
   }).catch(function(err){ showMsg('addMsg', false, err.message); });
 });
@@ -134,6 +149,19 @@ document.getElementById('pwForm').addEventListener('submit', function(e){
   }).catch(function(err){ showMsg('pwMsg', false, err.message); });
 });
 
-refresh();
+meReady.then(function(me){
+  var myLevel = ROLE_INFO[me.role].level;
+  var roles = Object.keys(ROLE_INFO).filter(function(r){
+    return me.role === 'super_admin' || ROLE_INFO[r].level <= myLevel;
+  }).filter(function(r){ return r !== 'super_admin' || me.role === 'super_admin'; })
+    .filter(function(r){ return !(me.branchId && r === 'dealer_admin'); });
+  fillSelect(document.getElementById('newRole'), roles.map(function(r){ return {id: r, name: ROLE_INFO[r].label}; }), null, 'operator');
+  return Promise.all([apiRequest('GET', '/api/dealers'), apiRequest('GET', '/api/branches')]).then(function(r){
+    dealers = r[0]; branches = r[1];
+    fillSelect(document.getElementById('newDealer'), dealers, 'Bayi seçin');
+    updateScopeFields();
+    return refresh();
+  });
+});
 </script>
 </body></html>

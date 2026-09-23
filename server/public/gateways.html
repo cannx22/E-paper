@@ -7,135 +7,255 @@
   <span class="tag">&#128225;</span>
   <div>
     <h1>Gateway Y&ouml;netimi</h1>
-    <p>Sunucuya ba&#287;lanan ESP32 gateway'leri onaylay&#305;n ve y&ouml;netin.</p>
+    <p>Gateway'lerin durumu, atanmas&#305; ve uzaktan y&ouml;netimi.</p>
   </div>
   <nav id="nav" class="nav-links"></nav>
 </div>
-<div class="wrap">
+<div class="wrap" style="max-width:1280px;">
   <section class="card">
     <h2>Gateway'ler</h2>
-    <p class="hint">Yeni bir gateway WiFi'ye ba&#287;lan&#305;p sunucuya ilk kez geldi&#287;inde burada <b>Onay Bekliyor</b> olarak g&ouml;r&uuml;n&uuml;r; onaylay&#305;nca etiket g&ouml;nderiminde se&ccedil;ilebilir. Liste 5 saniyede bir yenilenir.</p>
+    <div class="filters">
+      <select id="statusFilter"><option value="">T&uuml;m durumlar</option></select>
+      <input type="text" id="searchFilter" placeholder="&#304;sim, kimlik, bayi veya &#351;ube ara">
+      <span class="small" id="countInfo"></span>
+    </div>
     <div class="table-scroll">
       <table>
-        <thead><tr><th>&#304;sim</th><th>Kimlik (MAC)</th><th>Durum</th><th>Ba&#287;lant&#305;</th><th>nRF</th><th>IP / FW</th><th>Son G&ouml;r&uuml;lme</th><th></th></tr></thead>
-        <tbody id="gwBody"><tr><td colspan="8">Y&uuml;kleniyor...</td></tr></tbody>
+        <thead><tr><th>&#304;sim / Kimlik</th><th>Durum</th><th>Bayi / &#350;ube</th><th>WiFi</th><th>nRF</th><th>FW / IP</th><th>&Ccedil;al&#305;&#351;ma</th><th>Son G&ouml;r&uuml;lme</th><th></th></tr></thead>
+        <tbody id="gwBody"><tr><td colspan="9">Y&uuml;kleniyor...</td></tr></tbody>
       </table>
     </div>
     <div id="gwMsg" class="msg"></div>
   </section>
 
-  <section class="card">
-    <h2>Elle Gateway Ekle</h2>
-    <p class="hint">Gateway'i &ouml;nceden tan&#305;mlamak isterseniz MAC adresini girin (kurulum a&#287;&#305;nda veya Serial Monitor'de yazar). B&ouml;yle eklenen gateway onayl&#305; ba&#351;lar; ilk ba&#287;land&#305;&#287;&#305;nda anahtar&#305; kaydedilir.</p>
-    <form id="addForm">
+  <section class="card" id="claimCard" style="display:none;">
+    <h2>Gateway Ekle (Sahiplen)</h2>
+    <p class="hint">Gateway &uuml;zerindeki QR kodu telefonunuzun kameras&#305;yla okutun; sahiplenme sayfas&#305; kendili&#287;inden a&ccedil;&#305;l&#305;r. Ya da gateway kimli&#287;ini ve sahiplenme kodunu buraya yaz&#305;n.</p>
+    <form id="claimForm">
       <div class="row">
-        <div>
-          <label for="gwId">Kimlik (MAC, 12 hane)</label>
-          <input type="text" id="gwId" placeholder="A1B2C3D4E5F6" required>
-        </div>
-        <div>
-          <label for="gwName">&#304;sim</label>
-          <input type="text" id="gwName" placeholder="Merkez Ma&#287;aza" maxlength="40">
-        </div>
+        <div><label for="claimId">Gateway Kimli&#287;i (MAC)</label><input type="text" id="claimId" placeholder="A1B2C3D4E5F6" required></div>
+        <div><label for="claimCode">Sahiplenme Kodu</label><input type="text" id="claimCode" placeholder="ABCD-EFGH" required></div>
+        <div><label for="claimName">&#304;sim (iste&#287;e ba&#287;l&#305;)</label><input type="text" id="claimName" maxlength="60"></div>
+        <div id="claimBranchWrap"><label for="claimBranch">&#350;ube (iste&#287;e ba&#287;l&#305;)</label><select id="claimBranch"></select></div>
       </div>
-      <button type="submit" class="btn-primary">Ekle</button>
+      <button type="submit" class="btn-primary">Gateway'i Ekle</button>
     </form>
-    <div id="addMsg" class="msg"></div>
+    <div id="claimMsg" class="msg"></div>
+  </section>
+
+  <section class="card" id="registerCard" style="display:none;">
+    <h2>Merkezde Elle Kaydet</h2>
+    <p class="hint">Gateway'i hen&uuml;z ba&#287;lanmadan &ouml;nce MAC adresiyle kaydedin (kurulum a&#287;&#305;nda veya Serial Monitor'de yazar). Kay&#305;t sonras&#305; QR etiketini bas&#305;p cihaz&#305;n &uuml;zerine yap&#305;&#351;t&#305;rabilirsiniz. Kendili&#287;inden ba&#287;lanan gateway'ler listede <b>Beklemede</b> olarak g&ouml;r&uuml;n&uuml;r.</p>
+    <form id="registerForm">
+      <div class="row">
+        <div><label for="regId">Kimlik (MAC, 12 hane)</label><input type="text" id="regId" placeholder="A1B2C3D4E5F6" required></div>
+        <div><label for="regName">&#304;sim</label><input type="text" id="regName" maxlength="60"></div>
+      </div>
+      <button type="submit" class="btn-primary">Kaydet</button>
+    </form>
+    <div id="regMsg" class="msg"></div>
   </section>
 </div>
 
+<dialog id="assignDlg">
+  <form method="dialog" id="assignForm">
+    <h3 id="assignTitle">Atama</h3>
+    <p class="small" id="assignHint"></p>
+    <div id="assignDealerWrap"><label for="assignDealer">Bayi</label><select id="assignDealer"></select></div>
+    <label for="assignBranch">&#350;ube</label><select id="assignBranch"></select>
+    <div class="dlg-actions">
+      <button type="button" class="cancel" id="assignCancel">Vazge&ccedil;</button>
+      <button type="submit" class="ok">Kaydet</button>
+    </div>
+  </form>
+</dialog>
+
 <script src="/static/common.js"></script>
 <script>
-function showMsg(id, ok, text){
-  var el = document.getElementById(id);
-  el.className = 'msg ' + (ok ? 'ok' : 'err');
-  el.textContent = text;
+var gateways = [];
+var dealers = [];
+var branches = [];
+
+function branchesOf(dealerId){
+  return branches.filter(function(b){ return String(b.dealer_id) === String(dealerId); });
 }
 
-function renderGateways(list){
+function rssiText(g){
+  if (!g.online || g.wifiRssi == null) return '-';
+  var q = g.wifiRssi >= -60 ? 'iyi' : g.wifiRssi >= -75 ? 'orta' : 'zayıf';
+  return escapeHtml(g.wifiSsid || '') + '<br><span class="small">' + g.wifiRssi + ' dBm (' + q + ')</span>';
+}
+
+function actionsFor(g){
+  var can = currentUser.can, a = [], id = escapeHtml(g.id);
+  function btn(act, label, cls){ return '<button class="btn-sm ' + (cls || '') + '" data-act="' + act + '" data-id="' + id + '">' + label + '</button>'; }
+  if (can['gateway.register']){
+    if (g.state === 'pending') a.push(btn('register', 'Kaydet', 'ok'));
+    if (g.state === 'registered') a.push('<a class="btn-sm primary" style="text-decoration:none" href="/gateways/' + id + '/label" target="_blank">QR Etiket</a>');
+    a.push(btn('assign', g.dealerId ? 'Ata' : 'Bayiye Ata', g.dealerId ? '' : 'ok'));
+  } else if (can['gateway.assign']){
+    a.push(btn('assign', '&#350;ube'));
+  }
+  if (can['gateway.manage']){
+    a.push(btn('rename', '&#304;sim'));
+    if (g.online){
+      a.push(btn('restart', 'Yeniden Ba&#351;lat'));
+      a.push(btn('wifi_reset', 'WiFi S&#305;f&#305;rla'));
+    }
+  }
+  if (can['gateway.disable'] && g.state !== 'pending'){
+    a.push(g.state === 'disabled' ? btn('enable', 'Etkinle&#351;tir', 'ok') : btn('disable', 'Devre D&#305;&#351;&#305;'));
+  }
+  if (can['gateway.register']){
+    a.push(btn('reset-key', 'Anahtar S&#305;f&#305;rla'));
+    a.push(btn('delete', 'Sil', 'danger'));
+  }
+  return a.join('');
+}
+
+function render(){
+  var status = document.getElementById('statusFilter').value;
+  var q = document.getElementById('searchFilter').value.trim().toLowerCase();
+  var list = gateways.filter(function(g){
+    if (status && g.status !== status) return false;
+    if (!q) return true;
+    return [g.name, g.id, g.dealerName, g.branchName].some(function(v){ return v && String(v).toLowerCase().indexOf(q) !== -1; });
+  });
+  document.getElementById('countInfo').textContent = list.length + ' / ' + gateways.length + ' gateway';
   var body = document.getElementById('gwBody');
   if (!list.length){
-    body.innerHTML = '<tr><td colspan="8">Hen&uuml;z gateway yok. Bir ESP32 WiFi\'ye ba&#287;lan&#305;nca burada g&ouml;r&uuml;necek.</td></tr>';
+    body.innerHTML = '<tr><td colspan="9">' + (gateways.length ? 'Filtreye uyan gateway yok.' : 'Hen&uuml;z gateway yok.') + '</td></tr>';
     return;
   }
   body.innerHTML = list.map(function(g){
-    var status = g.status === 'approved'
-      ? '<span class="badge approved">Onayl&#305;</span>'
-      : '<span class="badge pending">Onay Bekliyor</span>';
-    var online = g.online ? '<span class="badge online">&#9679; &Ccedil;evrimi&ccedil;i</span>' : '<span class="badge offline">&#9675; &Ccedil;evrimd&#305;&#351;&#305;</span>';
+    var err = g.lastError && (g.status === 'error' || g.status === 'active') ? '<br><span class="small" style="color:#7a1c25">' + escapeHtml(g.lastError) + '</span>' : '';
+    var owner = g.dealerName ? escapeHtml(g.dealerName) + (g.branchName ? '<br><span class="small">' + escapeHtml(g.branchName) + '</span>' : '') : '<span class="small">atanmad&#305;</span>';
+    var code = g.claimCode && g.state === 'registered' ? '<br><span class="small">kod: <span class="mono">' + escapeHtml(g.claimCode) + '</span></span>' : '';
+    var key = g.hasKey ? '' : ' <span class="small" title="&#304;lk ba&#287;lant&#305;da anahtar kaydedilecek">(anahtar yok)</span>';
     var nrf = g.nrf === null ? '-' : (g.nrf ? '<span class="badge online">Haz&#305;r</span>' : '<span class="badge err">Yok</span>');
-    var key = g.hasKey ? '' : ' <span class="badge pending" title="&#304;lk ba&#287;lant&#305;da anahtar kaydedilecek">anahtar yok</span>';
-    var id = escapeHtml(g.id);
-    var actions = [];
-    if (g.status !== 'approved') actions.push('<button class="btn-sm ok" data-act="approve" data-id="' + id + '">Onayla</button>');
-    actions.push('<button class="btn-sm" data-act="rename" data-id="' + id + '" data-name="' + escapeHtml(g.name) + '">&#304;sim</button>');
-    if (g.online){
-      actions.push('<button class="btn-sm" data-act="restart" data-id="' + id + '">Yeniden Ba&#351;lat</button>');
-      actions.push('<button class="btn-sm" data-act="wifi_reset" data-id="' + id + '">WiFi S&#305;f&#305;rla</button>');
-    }
-    actions.push('<button class="btn-sm" data-act="reset-key" data-id="' + id + '">Anahtar S&#305;f&#305;rla</button>');
-    actions.push('<button class="btn-sm danger" data-act="delete" data-id="' + id + '">Sil</button>');
     return '<tr>' +
-      '<td><b>' + escapeHtml(g.name) + '</b></td>' +
-      '<td class="mono">' + id + key + '</td>' +
-      '<td>' + status + '</td>' +
-      '<td>' + online + '</td>' +
+      '<td><b>' + escapeHtml(g.name) + '</b><br><span class="mono small">' + escapeHtml(g.id) + '</span>' + key + code + '</td>' +
+      '<td><span class="badge st-' + g.status + '">' + escapeHtml(g.statusLabel) + '</span>' + err + '</td>' +
+      '<td>' + owner + '</td>' +
+      '<td>' + rssiText(g) + '</td>' +
       '<td>' + nrf + '</td>' +
-      '<td class="mono">' + escapeHtml(g.ip || '-') + '<br>' + escapeHtml(g.fw || '') + '</td>' +
+      '<td class="mono small">' + escapeHtml(g.fw || '-') + '<br>' + escapeHtml(g.ip || '') + '</td>' +
+      '<td>' + (g.online ? formatDuration(g.uptime) : '-') + '</td>' +
       '<td>' + (g.online ? '&#351;u an' : formatDate(g.lastSeen)) + '</td>' +
-      '<td><div class="actions">' + actions.join('') + '</div></td>' +
+      '<td><div class="actions">' + actionsFor(g) + '</div></td>' +
       '</tr>';
   }).join('');
 }
 
 function refresh(){
-  return apiRequest('GET', '/api/gateways').then(renderGateways).catch(function(err){
-    showMsg('gwMsg', false, err.message);
+  return apiRequest('GET', '/api/gateways').then(function(list){
+    gateways = list;
+    render();
+  }).catch(function(err){ showMsg('gwMsg', false, err.message); });
+}
+
+function loadOrg(){
+  return Promise.all([apiRequest('GET', '/api/dealers'), apiRequest('GET', '/api/branches')]).then(function(r){
+    dealers = r[0]; branches = r[1];
   });
 }
+
+// ---- Atama penceresi ----
+var assignTarget = null;
+var dlg = document.getElementById('assignDlg');
+function fillAssignBranches(){
+  var dealerId = currentUser.can['gateway.register'] ? document.getElementById('assignDealer').value : currentUser.dealerId;
+  fillSelect(document.getElementById('assignBranch'), dealerId ? branchesOf(dealerId) : [], '(şube yok / bayi seviyesi)', assignTarget && assignTarget.branchId);
+}
+function openAssign(g){
+  assignTarget = g;
+  var isSuper = currentUser.can['gateway.register'];
+  document.getElementById('assignTitle').textContent = g.name + ' (' + g.id + ')';
+  document.getElementById('assignHint').textContent = isSuper
+    ? 'Bayi boş bırakılırsa gateway serbest bırakılır ve yeni sahiplenme kodu üretilir.'
+    : 'Gateway\'in bağlı olduğu şubeyi seçin.';
+  document.getElementById('assignDealerWrap').style.display = isSuper ? 'block' : 'none';
+  if (isSuper) fillSelect(document.getElementById('assignDealer'), dealers, '(bayi yok - serbest bırak)', g.dealerId);
+  fillAssignBranches();
+  dlg.showModal();
+}
+document.getElementById('assignDealer').addEventListener('change', function(){
+  if (assignTarget) assignTarget = Object.assign({}, assignTarget, {branchId: null});
+  fillAssignBranches();
+});
+document.getElementById('assignCancel').addEventListener('click', function(){ dlg.close(); });
+document.getElementById('assignForm').addEventListener('submit', function(e){
+  e.preventDefault();
+  var body = {branchId: document.getElementById('assignBranch').value || null};
+  if (currentUser.can['gateway.register']) body.dealerId = document.getElementById('assignDealer').value || null;
+  apiRequest('POST', '/api/gateways/' + encodeURIComponent(assignTarget.id) + '/assign', body).then(function(){
+    dlg.close(); hideMsg('gwMsg'); refresh();
+  }).catch(function(err){ dlg.close(); showMsg('gwMsg', false, err.message); });
+});
 
 var CONFIRMS = {
   'restart': 'Gateway yeniden başlatılsın mı?',
   'wifi_reset': 'Gateway\'in kayıtlı WiFi bilgisi silinsin mi? Cihaz kurulum ağını (ESP32-NRF-Gateway-xxxx) açacak ve yerinde yeniden WiFi kurulumu gerekecek.',
+  'disable': 'Gateway devre dışı bırakılsın mı? Devre dışıyken etiket gönderilemez.',
   'reset-key': 'Anahtar sıfırlansın mı? Gateway\'in bir sonraki bağlantısındaki anahtar kabul edilecek (cihazın flash\'ı silindiyse gerekir).',
-  'delete': 'Gateway silinsin mi? Tekrar bağlanırsa onay bekleyen olarak yeniden görünür.'
+  'delete': 'Gateway tamamen silinsin mi? Tekrar bağlanırsa Beklemede olarak yeniden görünür.'
 };
 
 document.getElementById('gwBody').addEventListener('click', function(e){
   var btn = e.target.closest('button[data-act]');
   if (!btn) return;
-  var act = btn.dataset.act, id = btn.dataset.id;
-  var base = '/api/gateways/' + encodeURIComponent(id);
-  var req;
+  var act = btn.dataset.act;
+  var g = gateways.filter(function(x){ return x.id === btn.dataset.id; })[0];
+  if (!g) return;
+  if (act === 'assign') return openAssign(g);
   if (CONFIRMS[act] && !confirm(CONFIRMS[act])) return;
-  if (act === 'approve') req = apiRequest('POST', base + '/approve', {});
-  else if (act === 'rename'){
-    var name = prompt('Gateway ismi:', btn.dataset.name);
+  var base = '/api/gateways/' + encodeURIComponent(g.id), req;
+  if (act === 'rename'){
+    var name = prompt('Gateway ismi:', g.name);
     if (!name) return;
     req = apiRequest('POST', base + '/rename', {name: name});
   }
   else if (act === 'restart' || act === 'wifi_reset') req = apiRequest('POST', base + '/command', {command: act});
-  else if (act === 'reset-key') req = apiRequest('POST', base + '/reset-key', {});
   else if (act === 'delete') req = apiRequest('DELETE', base);
-  req.then(function(){
-    document.getElementById('gwMsg').className = 'msg';
-    return refresh();
-  }).catch(function(err){ showMsg('gwMsg', false, err.message); });
+  else req = apiRequest('POST', base + '/' + act, {});
+  req.then(function(){ hideMsg('gwMsg'); return refresh(); })
+     .catch(function(err){ showMsg('gwMsg', false, err.message); });
 });
 
-document.getElementById('addForm').addEventListener('submit', function(e){
+document.getElementById('statusFilter').addEventListener('change', render);
+document.getElementById('searchFilter').addEventListener('input', render);
+
+document.getElementById('registerForm').addEventListener('submit', function(e){
   e.preventDefault();
-  apiRequest('POST', '/api/gateways', {
-    id: document.getElementById('gwId').value,
-    name: document.getElementById('gwName').value
-  }).then(function(){
-    showMsg('addMsg', true, 'Gateway eklendi.');
-    e.target.reset();
-    refresh();
-  }).catch(function(err){ showMsg('addMsg', false, err.message); });
+  apiRequest('POST', '/api/gateways', {id: document.getElementById('regId').value, name: document.getElementById('regName').value})
+    .then(function(g){ showMsg('regMsg', true, 'Kaydedildi. Sahiplenme kodu: ' + g.claimCode); e.target.reset(); refresh(); })
+    .catch(function(err){ showMsg('regMsg', false, err.message); });
 });
 
-refresh();
+document.getElementById('claimForm').addEventListener('submit', function(e){
+  e.preventDefault();
+  apiRequest('POST', '/api/gateways/claim', {
+    id: document.getElementById('claimId').value,
+    code: document.getElementById('claimCode').value,
+    name: document.getElementById('claimName').value,
+    branchId: document.getElementById('claimBranch').value || null
+  }).then(function(g){
+    showMsg('claimMsg', true, g.name + ' eklendi. Durum: ' + g.statusLabel);
+    e.target.reset(); refresh();
+  }).catch(function(err){ showMsg('claimMsg', false, err.message); });
+});
+
+meReady.then(function(me){
+  var labels = {pending:'Beklemede', registered:'Kayıtlı', awaiting:'Bağlantı Bekleniyor', active:'Aktif', offline:'Offline', error:'Hata', disabled:'Devre Dışı'};
+  fillSelect(document.getElementById('statusFilter'), Object.keys(labels).map(function(k){ return {id:k, name:labels[k]}; }), 'Tüm durumlar');
+  if (me.can['gateway.register']) document.getElementById('registerCard').style.display = 'block';
+  if (me.can['gateway.claim'] && !me.can['gateway.register']) document.getElementById('claimCard').style.display = 'block';
+  return loadOrg().then(function(){
+    if (me.branchId) document.getElementById('claimBranchWrap').style.display = 'none';
+    else fillSelect(document.getElementById('claimBranch'), branchesOf(me.dealerId), '(şube yok / bayi seviyesi)');
+    return refresh();
+  });
+});
 setInterval(refresh, 5000);
 </script>
 </body></html>

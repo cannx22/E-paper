@@ -7,8 +7,9 @@
 //
 // Mesajlar (JSON, tek satir):
 //   gw  -> srv  {type:"hello", id, secret, fw, nrf}
-//   srv -> gw   {type:"hello_ack", status:"pending"|"approved", name}
-//   srv -> gw   {type:"status", status, name}          (onay/isim degisince)
+//   srv -> gw   {type:"hello_ack", status, name}
+//   srv -> gw   {type:"status", status, name}          (durum/isim degisince)
+//   gw  -> srv  {type:"telemetry", uptime, rssi, ssid, heap, nrf, error}
 //   srv -> gw   {type:"send", reqId, board, fields:{...}}
 //   gw  -> srv  {type:"result", reqId, ok, message}
 //   srv -> gw   {type:"command", command:"restart"|"wifi_reset"}
@@ -18,9 +19,14 @@
 // acilista urettigi ve flash'ta sakladigi rastgele anahtar. Sunucu sadece
 // secret'in SHA-256 ozetini saklar; ilk goruldugu anda kaydedilir (TOFU),
 // sonraki baglantilarda eslesmeyen secret reddedilir.
+//
+// Not: acik baglantilar bu surecin belleginde tutulur (tek sunucu ornegi).
+// Birden fazla sunucu ornegine gecildiginde (yatay olcekleme) baglanti
+// yonlendirmesi Redis gibi ortak bir kanala tasinmali.
 const crypto = require('crypto');
 const { WebSocketServer } = require('ws');
 const db = require('./db');
+const audit = require('./audit');
 
 const WS_PATH = '/ws/gateway';
 const HELLO_TIMEOUT_MS = 10000;
@@ -28,6 +34,25 @@ const SEND_TIMEOUT_MS = 20000;
 const PING_INTERVAL_MS = 25000;
 
 const connections = new Map(); // id -> Connection
+
+// ---- Gateway durumu (panelde gosterilen) ----
+// Kalici yasam dongusu (state) + calisma anindaki baglanti/telemetri.
+const STATUS_LABELS = {
+  pending: 'Beklemede',
+  registered: 'Kayıtlı',
+  awaiting: 'Bağlantı Bekleniyor',
+  active: 'Aktif',
+  offline: 'Offline',
+  error: 'Hata',
+  disabled: 'Devre Dışı',
+};
+
+function displayStatus(gw, online) {
+  if (gw.state !== 'active') return gw.state;
+  if (!online) return 'offline';
+  if (gw.nrf_ok === false || gw.last_error) return 'error';
+  return 'active';
+}
 
 function sha256(s) {
   return crypto.createHash('sha256').update(s).digest('hex');
@@ -49,7 +74,7 @@ class Connection {
   constructor(ws, gatewayId, info) {
     this.ws = ws;
     this.id = gatewayId;
-    this.info = info; // { ip, fw, nrf, connectedAt }
+    this.info = info; // { ip, connectedAt }
     this.queue = [];  // sirada bekleyen gonderimler
     this.current = null; // { reqId, resolve, timer }
     this.nextReqId = 1;
@@ -98,7 +123,7 @@ class Connection {
   }
 }
 
-function handleHello(ws, req, msg) {
+async function handleHello(ws, req, msg) {
   const id = String(msg.id || '').toUpperCase();
   const secret = String(msg.secret || '');
   if (!/^[0-9A-F]{12}$/.test(id) || !/^[0-9a-f]{32,64}$/.test(secret)) {
@@ -106,28 +131,29 @@ function handleHello(ws, req, msg) {
     ws.close(4000, 'bad hello');
     return null;
   }
+  const ip = clientIp(req);
 
-  let gw = db.findGateway(id);
+  let gw = await db.one('SELECT * FROM gateways WHERE id = $1', [id]);
   if (!gw) {
-    gw = db.addGateway({
-      id,
-      name: 'Gateway ' + id.slice(-6),
-      status: 'pending',
-      secretHash: sha256(secret),
-      createdAt: new Date().toISOString(),
-    });
-    console.log(`[gw ${id}] yeni gateway, onay bekliyor`);
-  } else if (!gw.secretHash) {
-    // Admin elle ekledi veya anahtari sifirladi: ilk gelen anahtari kabul et.
-    gw.secretHash = sha256(secret);
-    db.save();
+    gw = await db.one(
+      `INSERT INTO gateways (id, name, state, secret_hash, first_seen_at)
+       VALUES ($1, $2, 'pending', $3, now()) RETURNING *`,
+      [id, 'Gateway ' + id.slice(-6), sha256(secret)],
+    );
+    console.log(`[gw ${id}] yeni gateway, kayit bekliyor`);
+    await audit.log(null, 'gateway.first_seen', { entityType: 'gateway', entityId: id, dealerId: null, branchId: null, message: ip });
+  } else if (!gw.secret_hash) {
+    // Merkez elle kaydetti veya anahtari sifirladi: ilk gelen anahtari kabul et.
+    await db.query('UPDATE gateways SET secret_hash = $2 WHERE id = $1', [id, sha256(secret)]);
     console.log(`[gw ${id}] anahtar kaydedildi`);
-  } else if (!secretMatches(gw.secretHash, secret)) {
-    console.log(`[gw ${id}] REDDEDILDI: anahtar eslesmiyor (${clientIp(req)})`);
+  } else if (!secretMatches(gw.secret_hash, secret)) {
+    console.log(`[gw ${id}] REDDEDILDI: anahtar eslesmiyor (${ip})`);
     ws.send(JSON.stringify({ type: 'error', error: 'bad_secret' }));
     ws.close(4001, 'bad secret');
     return null;
   }
+
+  if (ws.readyState !== ws.OPEN) return null; // hello islenirken baglanti koptu
 
   const old = connections.get(id);
   if (old) {
@@ -135,23 +161,41 @@ function handleHello(ws, req, msg) {
     old.ws.close(4002, 'replaced');
   }
 
-  const info = {
-    ip: clientIp(req),
-    fw: String(msg.fw || ''),
-    nrf: !!msg.nrf,
-    connectedAt: new Date().toISOString(),
-  };
-  const conn = new Connection(ws, id, info);
+  // Bayiye atanmis ve dogrulanmis baglanti kuran gateway aktif olur.
+  const activating = gw.state === 'awaiting';
+  gw = await db.one(
+    `UPDATE gateways
+        SET state = CASE WHEN state = 'awaiting' THEN 'active' ELSE state END,
+            activated_at = CASE WHEN state = 'awaiting' THEN now() ELSE activated_at END,
+            first_seen_at = COALESCE(first_seen_at, now()),
+            connected_at = now(), last_seen_at = now(), last_message_at = now(),
+            last_ip = $2, fw_version = $3, nrf_ok = $4
+      WHERE id = $1 RETURNING *`,
+    [id, ip, String(msg.fw || '').slice(0, 32), !!msg.nrf],
+  );
+  if (activating) {
+    await audit.log(null, 'gateway.activated', { entityType: 'gateway', entityId: id, dealerId: gw.dealer_id, branchId: gw.branch_id });
+  }
+
+  const conn = new Connection(ws, id, { ip, connectedAt: gw.connected_at });
   connections.set(id, conn);
-
-  gw.lastSeen = info.connectedAt;
-  gw.lastIp = info.ip;
-  gw.fw = info.fw;
-  db.save();
-
-  conn.sendJson({ type: 'hello_ack', status: gw.status, name: gw.name });
-  console.log(`[gw ${id}] baglandi (${info.ip}, fw ${info.fw}, nrf ${info.nrf ? 'hazir' : 'YOK'}, ${gw.status})`);
+  conn.sendJson({ type: 'hello_ack', status: gw.state, name: gw.name });
+  console.log(`[gw ${id}] baglandi (${ip}, fw ${gw.fw_version}, nrf ${gw.nrf_ok ? 'hazir' : 'YOK'}, ${gw.state})`);
   return conn;
+}
+
+async function handleTelemetry(conn, msg) {
+  const num = (v) => (Number.isFinite(Number(v)) ? Math.round(Number(v)) : null);
+  await db.query(
+    `UPDATE gateways
+        SET uptime_s = $2, wifi_rssi = $3, wifi_ssid = $4, free_heap = $5, nrf_ok = $6,
+            last_error = $7, last_seen_at = now(), last_message_at = now()
+      WHERE id = $1`,
+    [
+      conn.id, num(msg.uptime), num(msg.rssi), msg.ssid ? String(msg.ssid).slice(0, 64) : null,
+      num(msg.heap), !!msg.nrf, msg.error ? String(msg.error).slice(0, 200) : null,
+    ],
+  );
 }
 
 function attach(httpServer) {
@@ -168,6 +212,7 @@ function attach(httpServer) {
 
   wss.on('connection', (ws, req) => {
     let conn = null;
+    let helloStarted = false;
     ws.isAlive = true;
     ws.on('pong', () => { ws.isAlive = true; });
 
@@ -183,17 +228,26 @@ function attach(httpServer) {
         return;
       }
       if (!conn) {
-        if (msg.type === 'hello') {
+        if (msg.type === 'hello' && !helloStarted) {
+          helloStarted = true;
           clearTimeout(helloTimer);
-          conn = handleHello(ws, req, msg);
+          handleHello(ws, req, msg)
+            .then((c) => { conn = c; })
+            .catch((err) => {
+              console.error('hello islenemedi:', err.message);
+              ws.close(1011, 'server error');
+            });
         }
         return;
       }
       if (msg.type === 'result') {
+        db.query('UPDATE gateways SET last_message_at = now(), last_seen_at = now() WHERE id = $1', [conn.id]).catch(() => {});
         conn.finish(String(msg.reqId), {
           ok: !!msg.ok,
           message: String(msg.message || (msg.ok ? 'OK' : 'HATA')),
         });
+      } else if (msg.type === 'telemetry') {
+        handleTelemetry(conn, msg).catch((err) => console.error('telemetri yazilamadi:', err.message));
       }
     });
 
@@ -203,11 +257,7 @@ function attach(httpServer) {
       conn.failAll('HATA: Gateway baglantisi koptu.');
       if (connections.get(conn.id) === conn) {
         connections.delete(conn.id);
-        const gw = db.findGateway(conn.id);
-        if (gw) {
-          gw.lastSeen = new Date().toISOString();
-          db.save();
-        }
+        db.query('UPDATE gateways SET last_seen_at = now() WHERE id = $1', [conn.id]).catch(() => {});
         console.log(`[gw ${conn.id}] baglanti kapandi`);
       }
     });
@@ -232,25 +282,22 @@ function attach(httpServer) {
 
 function isOnline(id) { return connections.has(id); }
 
-function connectionInfo(id) {
-  const c = connections.get(id);
-  return c ? c.info : null;
-}
-
-async function sendLabel(id, board, fields) {
-  const gw = db.findGateway(id);
-  if (!gw) return { ok: false, status: 404, message: 'HATA: Gateway bulunamadi.' };
-  if (gw.status !== 'approved') return { ok: false, status: 409, message: 'HATA: Gateway henuz onaylanmadi.' };
-  const conn = connections.get(id);
+// Etiketi gateway'e iletir. Kapsam/yetki kontrolu cagiran tarafta yapilir;
+// burada sadece gateway'in gonderime uygun durumda olup olmadigina bakilir.
+async function sendLabel(gw, board, fields) {
+  if (gw.state === 'disabled') return { ok: false, status: 409, message: 'HATA: Gateway devre disi.' };
+  if (gw.state !== 'active') return { ok: false, status: 409, message: 'HATA: Gateway henuz aktif degil.' };
+  const conn = connections.get(gw.id);
   if (!conn) return { ok: false, status: 503, message: 'HATA: Gateway cevrimdisi (sunucuya bagli degil).' };
   const result = await conn.enqueueSend(board, fields);
   return { ...result, status: result.ok ? 200 : 502 };
 }
 
-function notifyStatus(id) {
-  const gw = db.findGateway(id);
+async function notifyStatus(id) {
   const conn = connections.get(id);
-  if (gw && conn) conn.sendJson({ type: 'status', status: gw.status, name: gw.name });
+  if (!conn) return;
+  const gw = await db.one('SELECT state, name FROM gateways WHERE id = $1', [id]);
+  if (gw) conn.sendJson({ type: 'status', status: gw.state, name: gw.name });
 }
 
 function sendCommand(id, command) {
@@ -267,4 +314,7 @@ function disconnect(id) {
   conn.ws.close(4004, 'removed');
 }
 
-module.exports = { attach, isOnline, connectionInfo, sendLabel, notifyStatus, sendCommand, disconnect };
+module.exports = {
+  STATUS_LABELS, displayStatus,
+  attach, isOnline, sendLabel, notifyStatus, sendCommand, disconnect,
+};
