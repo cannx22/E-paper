@@ -39,7 +39,8 @@ function contentText(a){
   var d = a.details;
   if (a.action === 'label.send' && d && d.fields){
     var f = d.fields;
-    return [d.board, f.business, f.name, f.price ? f.price + ' ' + (f.unit || '') : ''].filter(Boolean).join(' · ');
+    var before = d.before && d.before.name ? ' (önceki: ' + d.before.name + (d.before.price ? ' ' + d.before.price : '') + ')' : '';
+    return [d.gatewayName, f.business, f.name, f.price ? f.price + ' ' + (f.unit || '') : ''].filter(Boolean).join(' · ') + before;
   }
   if (d && d.before !== undefined && d.after !== undefined) return JSON.stringify(d.before) + ' → ' + JSON.stringify(d.after);
   return a.message || '';
@@ -48,7 +49,8 @@ function contentText(a){
 function row(a){
   var result = '<span class="badge ' + (a.success ? 'online' : 'err') + '">' + (a.success ? 'Ba&#351;ar&#305;l&#305;' : 'Hata') + '</span>';
   if (a.action === 'label.send' && a.message) result += ' <span class="small">' + escapeHtml(a.message) + '</span>';
-  var entity = a.gateway_name ? escapeHtml(a.gateway_name) + '<br><span class="mono small">' + escapeHtml(a.entity_id) + '</span>' : escapeHtml(a.entity_id || '-');
+  var label = a.gateway_name || a.device_name;
+  var entity = label ? escapeHtml(label) + '<br><span class="mono small">' + escapeHtml(a.entity_id) + '</span>' : '<span class="mono">' + escapeHtml(a.entity_id || '-') + '</span>';
   return '<tr><td>' + formatDate(a.created_at) + '</td><td>' + escapeHtml(a.username || '-') + '</td>' +
     '<td>' + escapeHtml(auditActionLabel(a.action)) + '</td><td>' + entity + '</td>' +
     '<td>' + escapeHtml(a.dealer_name || '-') + (a.branch_name ? ' / ' + escapeHtml(a.branch_name) : '') + '</td>' +

@@ -77,6 +77,25 @@ eklenir, mevcut dosyalar değiştirilmez.
 
 Merkez, **Bayiye Ata** ile QR kullanmadan da doğrudan atama yapabilir.
 
+## E-paper cihazlar
+
+Her e-paper etiket, 8 haneli seri numarasıyla (örnek `80156767`) kayıtlı bir cihazdır.
+Cihazlar **Cihazlar** sayfasından eklenir ve yönetilir:
+
+- **Tek cihaz:** Seri numarası elle yazılabilir, USB barkod okuyucuyla okutulabilir veya
+  telefon kamerasıyla okunabilir. **Hızlı tarama** açıkken her okutmadan sonra alan
+  temizlenir, böylece cihazlar arka arkaya eklenebilir.
+- **Toplu ekleme:** Excel/CSV dosyası (sütunlar: Seri No, İsim, Model, Gateway, Şube) ya
+  da yapıştırılmış seri no listesiyle yapılır. Önce kontrol raporu çıkar: geçersiz,
+  tekrar eden ve zaten kayıtlı satırlar gösterilir. Ardından sadece geçerli satırlar
+  eklenir.
+- **Toplu işlemler:** Seçilen cihazlara gateway/şube atanabilir, cihazlar devre dışı
+  bırakılabilir, etkinleştirilebilir veya silinebilir.
+
+Etiket gönderirken hedef seri numarasıdır. Kayıtlı cihazın gateway'i otomatik kullanılır.
+Sunucu gateway'e `{type:"send", reqId, serial:"80156767", fields:{...}}` gönderir; seri
+numarasını nRF24 adresine (BCD) çevirme işi gateway ile alıcıda yapılır.
+
 ## Yerel geliştirme
 
 ```
@@ -95,7 +114,7 @@ Gateway'in yereldeki sunucuya bağlanması için kurulum sayfasındaki sunucu ad
 | Faz | Kapsam | Durum |
 |---|---|---|
 | 1 | PostgreSQL, bayi/şube, roller, gateway yaşam döngüsü, QR sahiplenme, telemetri, işlem logu, özet | ✅ |
-| 2 | E-paper cihaz kaydı (ID ile adresleme, barkod/QR, Excel toplu ekleme), ekran modelleri | |
+| 2 | E-paper cihaz kaydı (8 haneli seri no, barkod/QR, Excel toplu ekleme), ekran modelleri, `serial` protokolü | ✅ |
 | 3 | Kalıcı güncelleme kuyruğu (offline bekletme, tekrar deneme, toplu güncelleme, durum adımları) | |
 | 4 | Ürün/içerik yönetimi ve cihaz ↔ ürün eşleştirme | |
 | 5 | Şablon motoru, dinamik alanlar, sunucuda bitmap üretimi | |

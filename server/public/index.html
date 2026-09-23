@@ -122,16 +122,15 @@ input:focus,select:focus,textarea:focus{outline:none; border:2px solid var(--red
       <h2>Ba&#287;lant&#305;</h2>
       <div class="row">
         <div class="field">
+          <label>Hedef Seri No</label>
+          <input name="serial" id="serialInput" inputmode="numeric" maxlength="8" pattern="\d{8}" list="deviceOptions" placeholder="12345678" autocomplete="off" required>
+          <datalist id="deviceOptions"></datalist>
+          <div id="deviceInfo" style="font-size:12px; margin-top:6px; color:var(--muted);"></div>
+        </div>
+        <div class="field">
           <label>Gateway</label>
           <select name="gatewayId" id="gatewaySelect"><option value="">Y&uuml;kleniyor...</option></select>
           <div id="gatewayStatus"></div>
-        </div>
-        <div class="field">
-          <label>Hedef Ekran</label>
-          <select name="board" id="boardSelect">
-            <option value="ESA">ESA (2.13" panel)</option>
-            <option value="ESB">ESB (1.54" panel)</option>
-          </select>
         </div>
       </div>
     </section>
@@ -229,7 +228,7 @@ input:focus,select:focus,textarea:focus{outline:none; border:2px solid var(--red
 <div class="bulk-wrap">
   <section class="card">
     <h2>Toplu G&uuml;ncelleme (Excel ile)</h2>
-    <p class="hint">Birden fazla ekran&#305; tek seferde g&uuml;ncellemek i&ccedil;in &ouml;nce &ouml;rnek Excel &#351;ablonunu indirin, i&ccedil;ini doldurup buradan tekrar y&uuml;kleyin. T&uuml;m sat&#305;rlar yukar&#305;da se&ccedil;ili gateway'e g&ouml;nderilir.</p>
+    <p class="hint">Birden fazla ekran&#305; tek seferde g&uuml;ncellemek i&ccedil;in &ouml;nce &ouml;rnek Excel &#351;ablonunu indirin, i&ccedil;ini doldurup buradan tekrar y&uuml;kleyin. Her sat&#305;r <b>Seri No</b> s&uuml;tunundaki cihaza gider; kay&#305;tl&#305; cihazlar kendi gateway'lerini kullan&#305;r, kay&#305;tl&#305; olmayanlar yukar&#305;da se&ccedil;ili gateway'e g&ouml;nderilir.</p>
     <div class="bulk-controls">
       <button type="button" class="btn-ghost" id="downloadTemplateBtn">&#128229; Excel &#350;ablonu &#304;ndir</button>
       <input type="file" id="excelFileInput" accept=".xlsx,.xls,.csv">
@@ -238,7 +237,7 @@ input:focus,select:focus,textarea:focus{outline:none; border:2px solid var(--red
     <div id="bulkTableWrap" class="bulk-table-scroll" style="display:none;">
       <table id="bulkTable">
         <thead>
-          <tr><th>#</th><th>Ekran</th><th>&#350;ablon</th><th>&#304;&#351;letme</th><th>&Uuml;r&uuml;n</th><th>Fiyat</th><th>Durum</th></tr>
+          <tr><th>#</th><th>Seri No</th><th>&#350;ablon</th><th>&#304;&#351;letme</th><th>&Uuml;r&uuml;n</th><th>Fiyat</th><th>Durum</th></tr>
         </thead>
         <tbody></tbody>
       </table>
@@ -298,8 +297,50 @@ gatewaySelect.addEventListener('change', function(){
   localStorage.setItem(GATEWAY_KEY, gatewaySelect.value);
   updateGatewayStatus();
 });
-loadGateways();
 setInterval(loadGateways, 10000);
+
+// ---- Hedef cihaz (8 haneli seri no). Kayitli cihazlarda gateway cihaz
+// kaydindan otomatik secilir; kayitli olmayan seri no icin secili gateway
+// kullanilir. ?serial=12345678 ile sayfa hedefi dolu acilir (Cihazlar
+// sayfasindaki "Etiket Gonder"). ----
+var serialInput = document.getElementById('serialInput');
+var deviceMap = {};
+
+function isValidSerial(s){ return /^\d{8}$/.test(s); }
+
+function updateDeviceInfo(){
+  var el = document.getElementById('deviceInfo');
+  var s = serialInput.value.trim();
+  var d = deviceMap[s];
+  if (!s){ el.textContent = ''; return; }
+  if (!isValidSerial(s)){ el.style.color = 'var(--red-darker)'; el.textContent = 'Seri no 8 haneli rakam olmalı.'; return; }
+  if (!d){ el.style.color = 'var(--muted)'; el.textContent = 'Kayıtlı olmayan cihaz - seçili gateway üzerinden gönderilir.'; return; }
+  el.style.color = d.state === 'active' ? '#1e7e34' : 'var(--red-darker)';
+  el.textContent = (d.name || 'Kayıtlı cihaz') + (d.modelName ? ' · ' + d.modelName : '') +
+    (d.state !== 'active' ? ' · DEVRE DIŞI' : '') + (d.gatewayName ? '' : ' · gateway atanmamış');
+  if (d.gatewayId && gatewayList.some(function(g){ return g.id === d.gatewayId; })){
+    gatewaySelect.value = d.gatewayId;
+    updateGatewayStatus();
+  }
+}
+serialInput.addEventListener('input', function(){
+  serialInput.value = serialInput.value.replace(/\D/g, '').slice(0, 8);
+  updateDeviceInfo();
+});
+
+function loadDevices(){
+  return apiRequest('GET', '/api/devices?limit=2000').then(function(r){
+    deviceMap = {};
+    r.devices.forEach(function(d){ deviceMap[d.serial] = d; });
+    document.getElementById('deviceOptions').innerHTML = r.devices.map(function(d){
+      return '<option value="' + escapeHtml(d.serial) + '">' + escapeHtml((d.name || '') + (d.gatewayName ? ' · ' + d.gatewayName : '')) + '</option>';
+    }).join('');
+    updateDeviceInfo();
+  }).catch(function(){});
+}
+var initialSerial = new URLSearchParams(location.search).get('serial');
+if (initialSerial) serialInput.value = initialSerial.replace(/\D/g, '').slice(0, 8);
+Promise.all([loadGateways(), loadDevices()]).then(updateDeviceInfo);
 
 // ---- Turkce kodlama (label_payload.cpp / protocol.py ile birebir) ----
 var TURKISH_CODES = {'Ç':1,'ç':2,'Ğ':3,'ğ':4,'İ':5,'ı':6,
@@ -388,7 +429,7 @@ function refreshPresetSelect(selectName){
 }
 function collectFormValues(){
   return {
-    board: document.getElementById('boardSelect').value,
+    serial: serialInput.value.trim(),
     templateID: templateSelect.value,
     discountEnabled: document.getElementById('discountEnabled').checked,
     campaignEnabled: document.getElementById('campaignEnabled').checked,
@@ -402,8 +443,9 @@ function collectFormValues(){
     barcode: document.getElementById('barcodeInput').value
   };
 }
+// Kayitli urun yuklenirken hedef seri no degistirilmez (urun baska
+// etikete de basilabilir).
 function applyFormValues(v){
-  document.getElementById('boardSelect').value = v.board || 'ESA';
   templateSelect.value = v.templateID || '1';
   document.getElementById('discountEnabled').checked = !!v.discountEnabled;
   document.getElementById('campaignEnabled').checked = !!v.campaignEnabled;
@@ -758,8 +800,14 @@ renderPreview();
 document.getElementById('f').addEventListener('submit', function(e){
   e.preventDefault();
   var res = document.getElementById('result');
+  var values = collectFormValues();
+  if (!isValidSerial(values.serial)){
+    res.className = 'err'; res.style.display = 'block';
+    res.textContent = 'HATA: Seri numarası 8 haneli olmalı.';
+    return;
+  }
   res.className = ''; res.style.display = 'block'; res.textContent = 'Gönderiliyor...';
-  sendLabelRequest(collectFormValues())
+  sendLabelRequest(values, gatewaySelect.value)
     .then(function(result){
       res.className = result.ok ? 'ok' : 'err';
       res.textContent = result.txt;
@@ -770,10 +818,11 @@ document.getElementById('f').addEventListener('submit', function(e){
     });
 });
 
-// Etiket verisi sunucuya, sunucudan secili gateway'e (WebSocket) ve oradan
-// nRF24 ile ekrana gider; cevap gateway'in gonderim sonucunu tasir.
-function sendLabelRequest(values){
-  var body = Object.assign({}, values, {gatewayId: gatewaySelect.value});
+// Etiket verisi sunucuya, sunucudan gateway'e (WebSocket) ve oradan nRF24
+// ile seri numarasi verilen ekrana gider; cevap gateway'in gonderim
+// sonucunu tasir. gatewayId bos ise sunucu cihaz kaydindaki gateway'i kullanir.
+function sendLabelRequest(values, gatewayId){
+  var body = Object.assign({}, values, {gatewayId: gatewayId || null});
   return fetch('/api/send', {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
@@ -784,10 +833,10 @@ function sendLabelRequest(values){
 }
 
 // ---- Toplu guncelleme (Excel sablonu indir / yukle / sirayla gonder) ----
-var BULK_HEADERS = ['Hedef Ekran','Şablon','İndirim','Kampanya','İşletme Adı','Ürün Adı','Alt Başlık','Fiyat','Eski Fiyat','Birim','Alt Kod','Barkod'];
+var BULK_HEADERS = ['Seri No','Şablon','İndirim','Kampanya','İşletme Adı','Ürün Adı','Alt Başlık','Fiyat','Eski Fiyat','Birim','Alt Kod','Barkod'];
 var BULK_EXAMPLE_ROWS = [
-  ['ESA','Standart','Hayır','Hayır','Cemil Market','Süt 1L','Yerli Üretim','24.90','','TL','',''],
-  ['ESB','Ticket','Evet','Hayır','Cemil Market','Beyaz Peynir 500g','','45','60','TL','','8690000000127']
+  ['80156767','Standart','Hayır','Hayır','Cemil Market','Süt 1L','Yerli Üretim','24.90','','TL','',''],
+  ['80156768','Ticket','Evet','Hayır','Cemil Market','Beyaz Peynir 500g','','45','60','TL','','8690000000127']
 ];
 
 function requireXlsx(){
@@ -824,13 +873,13 @@ function bulkYesNo(v){
   return v === 'evet' || v === 'yes' || v === '1' || v === 'true' || v === 'doğru';
 }
 function normalizeBulkRow(row){
-  var board = bulkGetField(row, ['Hedef Ekran','board','ekran']).toUpperCase();
+  var serial = bulkGetField(row, ['Seri No','Seri','serial','Cihaz ID']).replace(/\s+/g, '');
   var templateText = bulkGetField(row, ['Şablon','Sablon','template']).toLowerCase();
   var templateID = '1';
   if (templateText.indexOf('ticket') !== -1) templateID = '3';
   else if (templateText.indexOf('basic') !== -1) templateID = '4';
   return {
-    board: board === 'ESB' ? 'ESB' : 'ESA',
+    serial: serial,
     templateID: templateID,
     discountEnabled: bulkYesNo(bulkGetField(row, ['İndirim','Indirim','discount'])),
     campaignEnabled: bulkYesNo(bulkGetField(row, ['Kampanya','campaign'])),
@@ -855,7 +904,7 @@ function renderBulkTable(){
     var tr = document.createElement('tr');
     tr.innerHTML =
       '<td>' + (idx + 1) + '</td>' +
-      '<td>' + escapeHtml(r.board) + '</td>' +
+      '<td class="mono">' + escapeHtml(r.serial) + (deviceMap[r.serial] && deviceMap[r.serial].name ? '<br><small>' + escapeHtml(deviceMap[r.serial].name) + '</small>' : '') + '</td>' +
       '<td>' + escapeHtml(r.templateID === '3' ? 'Ticket' : (r.templateID === '4' ? 'Basic' : 'Standart')) + '</td>' +
       '<td>' + escapeHtml(r.business) + '</td>' +
       '<td>' + escapeHtml(r.name) + '</td>' +
@@ -895,7 +944,8 @@ document.getElementById('parseExcelBtn').addEventListener('click', function(){
 // Toplu gonderimde MAX_RT hatasi (etiket onceki veriyi/ekrani islerken meşgul
 // oldugu icin) tekli gonderimden farkli olarak burada satir bazinda otomatik
 // yeniden deneniyor - tekli gonderim yolunu etkilemez, sadece bu toplu
-// akista devreye girer. Tum satirlar secili gateway'e gonderilir.
+// akista devreye girer. Kayitli cihazlar kendi gateway'lerine, kayitli
+// olmayan seri no'lar yukarida secili gateway'e gonderilir.
 var BULK_MAX_RETRIES = 2;       // ilk denemeden sonra en fazla kac kez daha denensin
 var BULK_RETRY_DELAY_MS = 5000; // yeniden denemeler arasi sabit bekleme
 
@@ -909,7 +959,12 @@ async function sendBulkSequential(){
       statusCells[i].textContent = attempt === 0 ? 'Gönderiliyor...' : ('Tekrar deneniyor (' + attempt + '/' + BULK_MAX_RETRIES + ')...');
       statusCells[i].className = 'bulk-status';
       try {
-        result = await sendLabelRequest(r);
+        if (!isValidSerial(r.serial)) {
+          result = {ok: false, txt: 'HATA: Seri numarası 8 haneli olmalı.'};
+          break;
+        }
+        var registered = deviceMap[r.serial];
+        result = await sendLabelRequest(r, registered && registered.gatewayId ? null : gatewaySelect.value);
       } catch (err) {
         result = {ok: false, txt: 'HATA: ' + err};
       }

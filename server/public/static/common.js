@@ -62,8 +62,9 @@ var meReady = apiRequest('GET', '/api/me').then(function(me){
   var nav = document.getElementById('nav');
   if (!nav) return me;
   var links = [];
-  if (me.can['label.send']) links.push(['/', '&#127991;&#65039; Etiket G&ouml;nder']);
+  if (me.can['label.send']) links.push(['/', '&#128228; Etiket G&ouml;nder']);
   links.push(['/dashboard', '&#128202; &Ouml;zet']);
+  if (me.can['device.view']) links.push(['/devices', '&#127991;&#65039; Cihazlar']);
   links.push(['/gateways', '&#128225; Gateway\'ler']);
   if (me.can['dealer.manage']) links.push(['/dealers', '&#127970; Bayiler']);
   if (me.can['branch.manage']) links.push(['/branches', '&#127980; &#350;ubeler']);

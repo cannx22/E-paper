@@ -21,7 +21,7 @@
     </div>
     <div class="table-scroll">
       <table>
-        <thead><tr><th>&#304;sim / Kimlik</th><th>Durum</th><th>Bayi / &#350;ube</th><th>WiFi</th><th>nRF</th><th>FW / IP</th><th>&Ccedil;al&#305;&#351;ma</th><th>Son G&ouml;r&uuml;lme</th><th></th></tr></thead>
+        <thead><tr><th>&#304;sim / Kimlik</th><th>Durum</th><th>Bayi / &#350;ube / Cihaz</th><th>WiFi</th><th>nRF</th><th>FW / IP</th><th>&Ccedil;al&#305;&#351;ma</th><th>Son G&ouml;r&uuml;lme</th><th></th></tr></thead>
         <tbody id="gwBody"><tr><td colspan="9">Y&uuml;kleniyor...</td></tr></tbody>
       </table>
     </div>
@@ -136,7 +136,7 @@ function render(){
     return '<tr>' +
       '<td><b>' + escapeHtml(g.name) + '</b><br><span class="mono small">' + escapeHtml(g.id) + '</span>' + key + code + '</td>' +
       '<td><span class="badge st-' + g.status + '">' + escapeHtml(g.statusLabel) + '</span>' + err + '</td>' +
-      '<td>' + owner + '</td>' +
+      '<td>' + owner + '<br><a class="small" href="/devices?gatewayId=' + escapeHtml(g.id) + '">' + (g.deviceCount || 0) + ' cihaz</a></td>' +
       '<td>' + rssiText(g) + '</td>' +
       '<td>' + nrf + '</td>' +
       '<td class="mono small">' + escapeHtml(g.fw || '-') + '<br>' + escapeHtml(g.ip || '') + '</td>' +

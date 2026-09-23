@@ -45,7 +45,8 @@ function refresh(){
   apiRequest('GET', '/api/dashboard').then(function(d){
     var c = d.counts, html = '';
     if (c.dealers !== undefined) html += stat(c.dealers, 'Bayi');
-    html += stat(c.branches, '&#350;ube') + stat(c.gateways, 'Gateway') + stat(c.users, 'Kullan&#305;c&#305;');
+    html += stat(c.branches, '&#350;ube') + stat(c.gateways, 'Gateway') + stat(c.devices, 'E-Paper Cihaz') + stat(c.users, 'Kullan&#305;c&#305;');
+    html += stat(c.devicesUnassigned, 'Gateway\'siz cihaz') + stat(c.devicesLastFailed, 'Son g&uuml;ncellemesi hatal&#305;');
     html += stat(d.sends24h.ok, 'Ba&#351;ar&#305;l&#305; g&ouml;nderim (24s)') + stat(d.sends24h.failed, 'Ba&#351;ar&#305;s&#305;z g&ouml;nderim (24s)');
     document.getElementById('stats').innerHTML = html;
     var order = ['active', 'offline', 'error', 'awaiting', 'registered', 'pending', 'disabled'];

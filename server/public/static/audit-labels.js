@@ -26,6 +26,14 @@ var AUDIT_ACTION_LABELS = {
   'gateway.enabled': 'Gateway etkinleştirildi',
   'gateway.key_reset': 'Gateway anahtarı sıfırlandı',
   'gateway.command': 'Gateway komutu',
-  'gateway.deleted': 'Gateway silindi'
+  'gateway.deleted': 'Gateway silindi',
+  'device.created': 'Cihaz eklendi',
+  'device.imported': 'Toplu cihaz ekleme',
+  'device.updated': 'Cihaz güncellendi',
+  'device.deleted': 'Cihaz silindi',
+  'device.bulk_assign': 'Toplu cihaz atama',
+  'device.bulk_disable': 'Toplu devre dışı',
+  'device.bulk_enable': 'Toplu etkinleştirme',
+  'device.bulk_delete': 'Toplu cihaz silme'
 };
 function auditActionLabel(a){ return AUDIT_ACTION_LABELS[a] || a; }

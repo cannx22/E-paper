@@ -70,13 +70,14 @@ function view(gw, user) {
     activatedAt: gw.activated_at,
     createdAt: gw.created_at,
     hasKey: !!gw.secret_hash,
-    deviceCount: null, // Faz 2: E-paper cihaz kaydi
+    deviceCount: gw.device_count != null ? gw.device_count : null,
   };
   if (user.role === 'super_admin') v.claimCode = formatCode(gw.claim_code);
   return v;
 }
 
-const SELECT_GW = `SELECT g.*, d.name AS dealer_name, b.name AS branch_name
+const SELECT_GW = `SELECT g.*, d.name AS dealer_name, b.name AS branch_name,
+                          (SELECT count(*)::int FROM devices dv WHERE dv.gateway_id = g.id) AS device_count
                      FROM gateways g
                      LEFT JOIN dealers d ON d.id = g.dealer_id
                      LEFT JOIN branches b ON b.id = g.branch_id`;

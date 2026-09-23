@@ -10,7 +10,9 @@
 //   srv -> gw   {type:"hello_ack", status, name}
 //   srv -> gw   {type:"status", status, name}          (durum/isim degisince)
 //   gw  -> srv  {type:"telemetry", uptime, rssi, ssid, heap, nrf, error}
-//   srv -> gw   {type:"send", reqId, board, fields:{...}}
+//   srv -> gw   {type:"send", reqId, serial:"12345678", fields:{...}}
+//               serial: hedef e-paper cihazin 8 haneli seri numarasi; nRF24
+//               adresine (BCD) cevirme gateway ve alici tarafinda yapilir.
 //   gw  -> srv  {type:"result", reqId, ok, message}
 //   srv -> gw   {type:"command", command:"restart"|"wifi_reset"}
 //   srv -> gw   {type:"error", error}                   (ardindan baglanti kapanir)
@@ -86,9 +88,9 @@ class Connection {
 
   // Gateway ayni anda tek etiket gonderebildigi icin (nRF tek radyo) istekler
   // sirayla, bir oncekinin sonucu gelince gonderilir.
-  enqueueSend(board, fields) {
+  enqueueSend(serial, fields) {
     return new Promise((resolve) => {
-      this.queue.push({ board, fields, resolve });
+      this.queue.push({ serial, fields, resolve });
       this.pump();
     });
   }
@@ -102,7 +104,7 @@ class Connection {
     }, SEND_TIMEOUT_MS);
     this.current = { reqId, resolve: job.resolve, timer };
     try {
-      this.sendJson({ type: 'send', reqId, board: job.board, fields: job.fields });
+      this.sendJson({ type: 'send', reqId, serial: job.serial, fields: job.fields });
     } catch (err) {
       this.finish(reqId, { ok: false, message: 'HATA: Gateway\'e gonderilemedi: ' + err.message });
     }
@@ -284,12 +286,12 @@ function isOnline(id) { return connections.has(id); }
 
 // Etiketi gateway'e iletir. Kapsam/yetki kontrolu cagiran tarafta yapilir;
 // burada sadece gateway'in gonderime uygun durumda olup olmadigina bakilir.
-async function sendLabel(gw, board, fields) {
+async function sendLabel(gw, serial, fields) {
   if (gw.state === 'disabled') return { ok: false, status: 409, message: 'HATA: Gateway devre disi.' };
   if (gw.state !== 'active') return { ok: false, status: 409, message: 'HATA: Gateway henuz aktif degil.' };
   const conn = connections.get(gw.id);
   if (!conn) return { ok: false, status: 503, message: 'HATA: Gateway cevrimdisi (sunucuya bagli degil).' };
-  const result = await conn.enqueueSend(board, fields);
+  const result = await conn.enqueueSend(serial, fields);
   return { ...result, status: result.ok ? 200 : 502 };
 }
 

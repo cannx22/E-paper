@@ -23,6 +23,8 @@ const ACTIONS = {
   'gateway.assign':    ['super_admin', 'dealer_admin'],                 // subeye atama
   'gateway.disable':   ['super_admin', 'dealer_admin'],
   'gateway.register':  ['super_admin'],                                 // kayit, bayiye atama, QR, silme
+  'device.view':       ['super_admin', 'dealer_admin', 'branch_admin', 'operator'],
+  'device.manage':     ['super_admin', 'dealer_admin', 'branch_admin'],   // ekleme, toplu ekleme, atama, silme
   'dealer.manage':     ['super_admin'],
   'branch.manage':     ['super_admin', 'dealer_admin'],
   'user.manage':       ['super_admin', 'dealer_admin', 'branch_admin'],

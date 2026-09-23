@@ -26,11 +26,13 @@ api.get('/audit', auth.requireApi('audit.view'), async (req, res) => {
   const rows = await db.many(
     `SELECT a.id, a.created_at, a.username, a.action, a.entity_type, a.entity_id, a.success, a.message, a.details,
             d.name AS dealer_name, b.name AS branch_name,
-            CASE WHEN a.entity_type = 'gateway' THEN g.name END AS gateway_name
+            CASE WHEN a.entity_type = 'gateway' THEN g.name END AS gateway_name,
+            CASE WHEN a.entity_type = 'device' THEN dv.name END AS device_name
        FROM audit_log a
        LEFT JOIN dealers d ON d.id = a.dealer_id
        LEFT JOIN branches b ON b.id = a.branch_id
        LEFT JOIN gateways g ON a.entity_type = 'gateway' AND g.id = a.entity_id
+       LEFT JOIN devices dv ON a.entity_type = 'device' AND dv.id = a.entity_id
       WHERE ${conds.join(' AND ')}
       ORDER BY a.id DESC
       LIMIT $${params.length}`,
@@ -80,6 +82,18 @@ api.get('/dashboard', auth.requireApi(), async (req, res) => {
   const uParams = [];
   counts.users = (await db.one(`SELECT count(*)::int AS n FROM users u WHERE ${scopeSql(user, 'u', uParams)}`, uParams)).n;
   counts.gateways = gateways.length;
+  const dParams = [];
+  const dev = await db.one(
+    `SELECT count(*)::int AS total,
+            count(*) FILTER (WHERE dv.gateway_id IS NULL)::int AS unassigned,
+            count(*) FILTER (WHERE dv.last_update_ok = false)::int AS last_failed,
+            count(*) FILTER (WHERE dv.state = 'disabled')::int AS disabled
+       FROM devices dv WHERE ${scopeSql(user, 'dv', dParams)}`,
+    dParams,
+  );
+  counts.devices = dev.total;
+  counts.devicesUnassigned = dev.unassigned;
+  counts.devicesLastFailed = dev.last_failed;
 
   const aParams = [];
   const sends = await db.one(

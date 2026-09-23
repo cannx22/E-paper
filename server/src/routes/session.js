@@ -61,7 +61,7 @@ const api = express.Router();
 api.get('/me', auth.requireApi(), (req, res) => {
   const u = req.user;
   const actions = ['label.send', 'gateway.manage', 'gateway.claim', 'gateway.assign', 'gateway.disable',
-    'gateway.register', 'dealer.manage', 'branch.manage', 'user.manage', 'audit.view'];
+    'gateway.register', 'device.view', 'device.manage', 'dealer.manage', 'branch.manage', 'user.manage', 'audit.view'];
   res.json({
     id: u.id,
     username: u.username,
