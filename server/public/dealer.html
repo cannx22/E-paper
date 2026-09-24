@@ -124,6 +124,14 @@ function loadGateways(){
 }
 function reloadAll(){ loadDealer(); loadBranches(); loadUsers(); loadGateways(); }
 
+// Ozet kartlarindaki "#tab-..." baglantilari ilgili sekmeyi acsin.
+$('stats').addEventListener('click', function(ev){
+  var a = ev.target.closest('a[href^="#tab-"]');
+  if (!a) return;
+  ev.preventDefault();
+  var link = document.querySelector('.nav-link[href="' + a.getAttribute('href') + '"]');
+  if (link) { tabler.Tab.getOrCreateInstance(link).show(); link.scrollIntoView({behavior: 'smooth', block: 'start'}); }
+});
 $('editBtn').addEventListener('click', function(){ OrgForms.openDealer(dealer).then(function(r){ if (r) loadDealer(); }); });
 $('toggleBtn').addEventListener('click', function(){
   var msg = dealer.active ? dealer.name + ' pasif yapılsın mı? Bayinin tüm kullanıcılarının oturumu kapanır, giriş yapamaz ve etiket gönderimi durur.' : dealer.name + ' tekrar aktif yapılsın mı?';

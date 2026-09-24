@@ -62,6 +62,20 @@ body { font-feature-settings: "cv03", "cv04", "cv11"; }
 .stat-card .stat-label { color: var(--tblr-secondary); font-size: .72rem; text-transform: uppercase; letter-spacing: .04em; line-height: 1.25; }
 .stat-card .avatar { width: 2.6rem; height: 2.6rem; }
 
+/* Pencereler: govde + alt butonlar bir <form> icinde oldugunda da uzun icerik
+   pencere icinde kaysin, alt butonlar her zaman gorunsun. Tum pencereler
+   ekran yuksekligini asmaz. */
+.modal-dialog { max-height: calc(100% - var(--tblr-modal-margin, 1.75rem) * 2); }
+.modal-dialog > .modal-content { max-height: calc(100vh - var(--tblr-modal-margin, 1.75rem) * 2); overflow: hidden; }
+.modal-content > form { display: flex; flex-direction: column; min-height: 0; flex: 1 1 auto; overflow: hidden; }
+.modal-content > .modal-body, .modal-content > form > .modal-body { overflow-y: auto; min-height: 0; flex: 1 1 auto; }
+.modal-content > .modal-header, .modal-content > .modal-footer, .modal-content > form > .modal-footer { flex-shrink: 0; }
+@media (max-width: 575.98px) {
+  .modal-dialog { margin: .5rem; }
+  .modal-dialog > .modal-content { max-height: calc(100vh - 1rem); }
+  .modal-footer { flex-wrap: wrap; }
+}
+
 /* Toplu islem cubugu */
 .bulk-bar { position: sticky; top: .5rem; z-index: 5; }
 
@@ -86,4 +100,24 @@ body { font-feature-settings: "cv03", "cv04", "cv11"; }
 @media (max-width: 767.98px) {
   .page-header .col-auto.ms-auto { width: 100%; }
   .page-header .btn-list { justify-content: flex-start; }
+  /* Liste tablolari telefonda ezilmesin: yatay kaydirilsin. */
+  .card > .table-responsive > .card-table { min-width: 760px; }
+  .card > .table-responsive > .card-table.table-sm { min-width: 560px; }
+  .card-table td { white-space: nowrap; }
+  .card-table td[style*="max-width"] { white-space: normal; min-width: 220px; }
+  .page-title { font-size: 1.1rem; }
 }
+
+/* Telefonda ust bar: menu dugmesi, logo ve tema/profil tek satirda. */
+@media (max-width: 991.98px) {
+  .navbar-vertical > .container-fluid { flex-wrap: wrap; }
+  .navbar-vertical .navbar-brand { flex: 1 1 auto; justify-content: flex-start; margin: 0 .5rem; padding: .25rem 0; font-size: 1rem; min-width: 0; }
+  .navbar-vertical .navbar-brand .brand-mark { width: 28px; height: 28px; font-size: 16px; }
+  .navbar-vertical > .container-fluid > .navbar-nav.flex-row { flex-direction: row; margin-left: auto; align-items: center; }
+  .navbar-vertical > .container-fluid > .navbar-collapse { flex-basis: 100%; }
+}
+
+/* Sekmeler dar ekranda alt satira dusmesin, yatay kaysin. */
+.card-header-tabs { flex-wrap: nowrap; overflow-x: auto; overflow-y: hidden; scrollbar-width: none; }
+.card-header-tabs::-webkit-scrollbar { display: none; }
+.card-header-tabs .nav-link { white-space: nowrap; }
