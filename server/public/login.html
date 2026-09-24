@@ -8,45 +8,56 @@
 <link rel="stylesheet" href="/vendor/tabler-icons/tabler-icons.min.css">
 <link rel="stylesheet" href="/static/app.css">
 </head>
-<body class="d-flex flex-column auth-bg">
-<div class="page page-center">
-  <div class="container container-tight py-4">
-    <div class="text-center mb-4">
-      <span class="d-inline-flex align-items-center gap-2 fs-2 fw-bold">
-        <span class="avatar avatar-md" style="background:linear-gradient(135deg,#4f6ef7,#8b5cf6);color:#fff"><i class="ti ti-tags fs-2"></i></span>
-        E-Paper Yönetim
-      </span>
+<body>
+<div class="auth-split">
+  <section class="auth-brand">
+    <div class="d-flex align-items-center gap-2 fs-3 fw-bold">
+      <span class="brand-mark d-inline-flex align-items-center justify-content-center" style="width:38px;height:38px;border-radius:11px;background:linear-gradient(135deg,#5b6cff,#8b5cf6)"><i class="ti ti-tags fs-2"></i></span>
+      E-Paper Yönetim
     </div>
-    <div class="card card-md shadow-sm">
-      <div class="card-body">
-        <h2 class="h2 text-center mb-2">Hesabınıza giriş yapın</h2>
-        <p class="text-secondary text-center mb-4">E-paper etiket, gateway ve cihaz yönetim paneli</p>
-        <div class="alert alert-danger" id="loginError" hidden></div>
-        <form method="POST" action="/login" autocomplete="on">
-          <input type="hidden" name="next" id="nextInput">
-          <div class="mb-3">
-            <label class="form-label" for="email">E-posta</label>
-            <div class="input-icon">
-              <span class="input-icon-addon"><i class="ti ti-mail"></i></span>
-              <input type="text" class="form-control" id="email" name="email" placeholder="ornek@firma.com" autocomplete="username" required autofocus>
-            </div>
-          </div>
-          <div class="mb-3">
-            <label class="form-label" for="password">Şifre</label>
-            <div class="input-group input-group-flat">
-              <span class="input-group-text"><i class="ti ti-lock"></i></span>
-              <input type="password" class="form-control" id="password" name="password" autocomplete="current-password" required>
-              <span class="input-group-text"><a href="#" class="link-secondary" id="togglePw" title="Şifreyi göster"><i class="ti ti-eye"></i></a></span>
-            </div>
-          </div>
-          <div class="form-footer">
-            <button type="submit" class="btn btn-primary w-100"><i class="ti ti-login-2 me-1"></i>Giriş Yap</button>
-          </div>
-        </form>
+    <div>
+      <h1>Tüm e-paper etiketleriniz<br>tek bir panelde.</h1>
+      <p class="lead">Bayiler, şubeler, gateway'ler ve binlerce etiket; fiyat güncellemeleri saniyeler içinde, çevrimdışı olsa bile kuyrukta bekleyip otomatik gönderilir.</p>
+      <div class="auth-feature"><i class="ti ti-router"></i><div><b>Gateway yönetimi</b><span>Canlı durum, sinyal gücü, uzaktan yeniden başlatma</span></div></div>
+      <div class="auth-feature"><i class="ti ti-stack-2"></i><div><b>Toplu güncelleme</b><span>Yüzlerce etikete tek tıkla, ilerlemesi adım adım takip edilir</span></div></div>
+      <div class="auth-feature"><i class="ti ti-shield-check"></i><div><b>Rol tabanlı erişim</b><span>Merkez, bayi, şube ve operatör yetkileri</span></div></div>
+    </div>
+    <div class="small" style="color:rgba(255,255,255,.45)">© E-Paper Yönetim Platformu</div>
+  </section>
+
+  <section class="auth-form-side">
+    <div class="auth-card">
+      <div class="d-lg-none text-center mb-4">
+        <span class="d-inline-flex align-items-center gap-2 fs-2 fw-bold">
+          <span class="avatar avatar-md" style="background:linear-gradient(135deg,#5b6cff,#8b5cf6);color:#fff"><i class="ti ti-tags fs-2"></i></span>E-Paper Yönetim
+        </span>
       </div>
+      <h2 class="mb-1">Tekrar hoş geldiniz</h2>
+      <p class="text-secondary mb-4">Devam etmek için hesabınıza giriş yapın.</p>
+      <div class="alert alert-danger" id="loginError" hidden></div>
+      <form method="POST" action="/login" autocomplete="on">
+        <input type="hidden" name="next" id="nextInput">
+        <div class="mb-3">
+          <label class="form-label" for="email">E-posta</label>
+          <div class="input-icon">
+            <span class="input-icon-addon"><i class="ti ti-mail"></i></span>
+            <input type="text" class="form-control form-control-lg" id="email" name="email" placeholder="ornek@firma.com" autocomplete="username" required autofocus>
+          </div>
+        </div>
+        <div class="mb-4">
+          <label class="form-label" for="password">Şifre</label>
+          <div class="input-icon">
+            <span class="input-icon-addon"><i class="ti ti-lock"></i></span>
+            <input type="password" class="form-control form-control-lg" id="password" name="password" autocomplete="current-password" required style="padding-right:2.75rem">
+            <a href="#" class="link-secondary position-absolute top-50 end-0 translate-middle-y me-3" id="togglePw" title="Şifreyi göster"><i class="ti ti-eye"></i></a>
+          </div>
+        </div>
+        <button type="submit" class="btn btn-primary btn-lg w-100"><i class="ti ti-login-2 me-2"></i>Giriş Yap</button>
+      </form>
+      <div class="text-center text-secondary mt-4 small">Şifrenizi mi unuttunuz? Bayi yöneticinize veya merkeze başvurun.</div>
+      <div class="text-center mt-3"><a href="#" class="small link-secondary" id="themeLink"><i class="ti ti-contrast-2 me-1"></i>Tema değiştir</a></div>
     </div>
-    <div class="text-center text-secondary mt-3 small">Şifrenizi unuttuysanız bayi yöneticinize veya merkeze başvurun.</div>
-  </div>
+  </section>
 </div>
 <script>
 var params = new URLSearchParams(location.search);
@@ -66,6 +77,12 @@ document.getElementById('togglePw').addEventListener('click', function(e){
   var i = document.getElementById('password');
   i.type = i.type === 'password' ? 'text' : 'password';
   this.firstChild.className = 'ti ' + (i.type === 'password' ? 'ti-eye' : 'ti-eye-off');
+});
+document.getElementById('themeLink').addEventListener('click', function(e){
+  e.preventDefault();
+  var t = document.documentElement.getAttribute('data-bs-theme') === 'dark' ? 'light' : 'dark';
+  document.documentElement.setAttribute('data-bs-theme', t);
+  try { localStorage.setItem('epaper-theme', t); } catch (x) {}
 });
 </script>
 </body>

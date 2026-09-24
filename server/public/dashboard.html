@@ -13,15 +13,12 @@
 <div id="app-sidebar"></div>
 <div class="page-wrapper">
   <div class="page-header d-print-none"><div class="container-xl"><div class="row g-2 align-items-center">
-    <div class="col"><div class="page-pretitle" id="scopeText">Genel durum</div><h2 class="page-title"><i class="ti ti-layout-dashboard me-2"></i>Genel Bakış</h2></div>
-    <div class="col-auto ms-auto"><div class="btn-list">
-      <a href="/" class="btn btn-primary" data-can="label.send"><i class="ti ti-send me-1"></i>Etiket Gönder</a>
-      <a href="/devices" class="btn" data-can="device.manage"><i class="ti ti-plus me-1"></i>Cihaz Ekle</a>
-    </div></div>
+    <div class="col"><div class="page-pretitle" id="scopeText">Genel durum</div><h2 class="page-title"><i class="ti ti-layout-dashboard me-2"></i><span id="greeting">Genel Bakış</span></h2></div>
   </div></div></div>
 
   <div class="page-body"><div class="container-xl">
     <div class="row row-deck row-cards" id="stats"></div>
+    <div class="row g-3 mt-1" id="quickActions"></div>
 
     <div class="row row-cards mt-1">
       <div class="col-lg-5">
@@ -47,14 +44,25 @@
       </div>
     </div>
 
-    <div class="card mt-3">
-      <div class="card-header"><h3 class="card-title"><i class="ti ti-circle-x me-2 text-danger"></i>Son Başarısız İşlemler</h3>
-        <div class="card-actions"><a href="/history?type=failed" class="btn btn-sm">Tümü</a></div></div>
-      <div class="table-responsive">
-        <table class="table table-vcenter card-table">
-          <thead><tr><th>Zaman</th><th>Kullanıcı</th><th>İşlem</th><th>Kaynak</th><th>Mesaj</th></tr></thead>
-          <tbody id="failBody"><tr><td colspan="5" class="text-secondary">Yükleniyor...</td></tr></tbody>
-        </table>
+    <div class="row row-cards mt-1">
+      <div class="col-lg-5">
+        <div class="card">
+          <div class="card-header"><h3 class="card-title"><i class="ti ti-activity me-2 text-primary"></i>Son Aktivite</h3>
+            <div class="card-actions"><a href="/history" class="btn btn-sm">Tümü</a></div></div>
+          <ul class="activity" id="activity"><li class="text-secondary">Yükleniyor...</li></ul>
+        </div>
+      </div>
+      <div class="col-lg-7">
+        <div class="card">
+          <div class="card-header"><h3 class="card-title"><i class="ti ti-circle-x me-2 text-danger"></i>Son Başarısız İşlemler</h3>
+            <div class="card-actions"><a href="/history?type=failed" class="btn btn-sm">Tümü</a></div></div>
+          <div class="table-responsive">
+            <table class="table table-vcenter card-table">
+              <thead><tr><th>Zaman</th><th>Kullanıcı</th><th>İşlem</th><th>Kaynak</th><th>Mesaj</th></tr></thead>
+              <tbody id="failBody"><tr><td colspan="5" class="text-secondary">Yükleniyor...</td></tr></tbody>
+            </table>
+          </div>
+        </div>
       </div>
     </div>
   </div></div>
@@ -63,11 +71,13 @@
 <script src="/static/app.js"></script>
 <script>
 var e = App.escapeHtml;
+// Dikey kart: ustte etiket + ikon, altta buyuk sayi ve aciklama (dar alanda da okunur).
 function stat(value, label, icon, color, href, sub){
-  return '<div class="col-6 col-md-4 col-lg-3 col-xxl"><a class="card card-sm stat-card card-link text-reset" href="' + href + '"><div class="card-body"><div class="d-flex align-items-center gap-3">' +
-    '<span class="avatar bg-' + color + '-lt flex-shrink-0"><i class="ti ' + icon + ' fs-2"></i></span><div class="min-w-0">' +
-    '<div class="stat-value">' + value + '</div><div class="stat-label">' + label + '</div>' +
-    (sub ? '<div class="small text-secondary lh-sm">' + sub + '</div>' : '') + '</div></div></div></a></div>';
+  return '<div class="col-6 col-md-4 col-lg-3 col-xxl"><a class="card card-sm stat-card stat-v card-link text-reset" href="' + href + '"><div class="card-body">' +
+    '<div class="d-flex align-items-start justify-content-between gap-2"><div class="stat-label">' + label + '</div>' +
+    '<span class="avatar avatar-sm bg-' + color + '-lt flex-shrink-0"><i class="ti ' + icon + '"></i></span></div>' +
+    '<div class="stat-value mt-1">' + value + '</div>' +
+    (sub ? '<div class="small text-secondary lh-sm mt-1 text-truncate">' + sub + '</div>' : '') + '</div></a></div>';
 }
 var ORDER = ['active', 'offline', 'error', 'awaiting', 'registered', 'pending', 'disabled'];
 var COLORS = {active:'green', offline:'secondary', error:'red', awaiting:'azure', registered:'indigo', pending:'yellow', disabled:'dark'};
@@ -79,9 +89,9 @@ function refresh(){
     html += stat(c.branches, 'Şube', 'ti-building', 'blue', currentUser.can['branch.view'] ? '/branches' : '#');
     html += stat(c.gateways, 'Gateway', 'ti-router', 'cyan', '/gateways', s.active + ' aktif, ' + (s.offline + s.error) + ' sorunlu');
     html += stat(c.devices, 'Cihaz', 'ti-tags', 'green', '/devices', c.devicesUnassigned + ' gateway\'siz');
-    html += stat(c.pendingUpdates, 'Bekleyen', 'ti-clock', c.pendingUpdates ? 'yellow' : 'secondary', '/updates', 'güncelleme');
-    html += stat(d.sends24h.ok, 'Başarılı', 'ti-circle-check', 'teal', '/history?type=labels', 'son 24 saat');
-    html += stat(d.sends24h.failed, 'Başarısız', 'ti-circle-x', d.sends24h.failed ? 'red' : 'secondary', '/history?type=failed', 'son 24 saat');
+    html += stat(c.pendingUpdates, 'Kuyrukta', 'ti-clock', c.pendingUpdates ? 'yellow' : 'secondary', '/updates', 'bekleyen güncelleme');
+    html += stat(d.sends24h.ok, 'Başarılı', 'ti-circle-check', 'teal', '/history?type=labels', 'gönderim · 24 saat');
+    html += stat(d.sends24h.failed, 'Başarısız', 'ti-circle-x', d.sends24h.failed ? 'red' : 'secondary', '/history?type=failed', 'gönderim · 24 saat');
     document.getElementById('stats').innerHTML = html;
 
     var total = ORDER.reduce(function(a, k){ return a + s[k]; }, 0) || 1;
@@ -108,10 +118,42 @@ function refresh(){
     }).join('') : App.emptyRow(5, 'Başarısız işlem yok', 'ti-circle-check');
   });
 }
+function loadActivity(){
+  App.apiRequest('GET', '/api/audit?limit=9').then(function(list){
+    document.getElementById('activity').innerHTML = list.length ? list.map(function(a){
+      var cls = a.success ? (a.action === 'label.send' ? 'ok' : '') : 'err';
+      var what = a.gateway_name || a.device_name || a.entity_id || '';
+      return '<li><span class="dot ' + cls + '"></span><div class="d-flex justify-content-between gap-2"><div class="min-w-0"><div class="fw-medium text-truncate">' + e(App.AUDIT_LABELS[a.action] || a.action) +
+        (what ? ' <span class="text-secondary fw-normal">· ' + e(what) + '</span>' : '') + '</div><div class="small text-secondary text-truncate">' + e(a.username || 'sistem') + '</div></div>' +
+        '<div class="small text-secondary text-nowrap">' + App.formatRelative(a.created_at) + '</div></div></li>';
+    }).join('') : '<li class="text-secondary">Henüz aktivite yok.</li>';
+  });
+}
+function quickActions(me){
+  var qa = [
+    me.can['label.send'] && ['/', 'ti-send', 'blue', 'Etiket Gönder', 'Tek etikete içerik gönder'],
+    me.can['label.send'] && ['/devices', 'ti-stack-2', 'purple', 'Toplu Güncelleme', 'Cihaz seç, hepsine gönder'],
+    me.can['device.manage'] && ['/devices?add=1', 'ti-scan', 'green', 'Cihaz Ekle', 'Barkod / QR ile hızlı ekle'],
+    me.can['gateway.claim'] && !me.can['gateway.register'] && ['/gateways', 'ti-qrcode', 'cyan', 'Gateway Ekle', 'QR kodla sahiplen'],
+    me.can['dealer.manage'] && ['/dealers', 'ti-building-store', 'orange', 'Yeni Bayi', 'Bayi ve ilk yöneticisini aç'],
+    !me.can['label.send'] && ['/updates', 'ti-list-check', 'blue', 'Güncellemeler', 'Kuyruğu izle']
+  ].filter(Boolean).slice(0, 4);
+  document.getElementById('quickActions').innerHTML = qa.map(function(q){
+    return '<div class="col-sm-6 col-xl-3"><a class="quick-action" href="' + q[0] + '"><span class="qa-icon bg-' + q[2] + '-lt"><i class="ti ' + q[1] + '"></i></span>' +
+      '<span class="min-w-0"><div class="qa-title">' + q[3] + '</div><div class="qa-sub text-truncate">' + q[4] + '</div></span><i class="ti ti-chevron-right ms-auto text-secondary"></i></a></div>';
+  }).join('');
+}
 App.meReady.then(function(me){
-  document.getElementById('scopeText').textContent = me.dealerName ? me.dealerName + (me.branchName ? ' / ' + me.branchName : '') : 'Tüm sistem';
-  refresh();
+  var h = new Date().getHours();
+  var hello = h < 6 ? 'İyi geceler' : h < 12 ? 'Günaydın' : h < 18 ? 'İyi günler' : 'İyi akşamlar';
+  var first = (me.fullName || '').split(' ')[0];
+  document.getElementById('greeting').textContent = hello + (first ? ', ' + first : '');
+  document.getElementById('scopeText').textContent = new Date().toLocaleDateString('tr-TR', {weekday: 'long', day: 'numeric', month: 'long'}) + ' · ' +
+    (me.dealerName ? me.dealerName + (me.branchName ? ' / ' + me.branchName : '') : 'Tüm sistem');
+  quickActions(me);
+  refresh(); loadActivity();
 });
+setInterval(loadActivity, 20000);
 setInterval(refresh, 15000);
 </script>
 </body>

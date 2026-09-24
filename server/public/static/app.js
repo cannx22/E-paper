@@ -304,31 +304,43 @@
       '<a href="#" class="nav-link px-2" data-theme-toggle title="Tema"><i class="ti ' + themeIcon + '"></i></a>' +
       '<a href="/profile" class="nav-link px-2" title="Profil"><span class="avatar avatar-sm bg-primary-lt">' + escapeHtml(initials) + '</span></a></div>' +
       '<div class="collapse navbar-collapse" id="sidebar-menu">' +
-      '<div class="scope-chip d-none d-lg-block"><i class="ti ti-map-pin me-1"></i>' + escapeHtml(scope) + '</div>' +
-      '<ul class="navbar-nav pt-lg-1">' + nav + '</ul></div></div></aside>';
-
-    var wrapper = document.querySelector('.page-wrapper');
-    if (wrapper && !$('app-topbar')) {
-      var top = document.createElement('header');
-      top.id = 'app-topbar';
-      top.className = 'navbar navbar-expand-md d-none d-lg-flex d-print-none';
-      top.innerHTML = '<div class="container-xl"><div class="navbar-nav flex-row order-md-last ms-auto">' +
-        '<a href="#" class="nav-link px-3" data-theme-toggle title="Koyu / açık tema"><i class="ti ' + themeIcon + ' fs-2"></i></a>' +
-        '<div class="nav-item dropdown"><a href="#" class="nav-link d-flex lh-1 text-reset p-0 ms-2" data-bs-toggle="dropdown">' +
-        '<span class="avatar avatar-sm bg-primary-lt">' + escapeHtml(initials) + '</span>' +
-        '<div class="d-none d-xl-block ps-2"><div>' + escapeHtml(me.displayName) + '</div><div class="mt-1 small text-secondary">' + escapeHtml(me.roleLabel) + ' · ' + escapeHtml(scope) + '</div></div></a>' +
-        '<div class="dropdown-menu dropdown-menu-end dropdown-menu-arrow">' +
-        '<a href="/profile" class="dropdown-item"><i class="ti ti-user-circle me-2"></i>Profilim</a>' +
-        '<a href="/profile#sessions" class="dropdown-item"><i class="ti ti-devices me-2"></i>Oturumlarım</a>' +
-        '<div class="dropdown-divider"></div><a href="/logout" class="dropdown-item text-danger"><i class="ti ti-logout me-2"></i>Çıkış Yap</a>' +
-        '</div></div></div></div>';
-      wrapper.insertBefore(top, wrapper.firstChild);
-    }
+      '<div class="scope-chip d-none d-lg-flex" title="' + escapeHtml(scope) + '"><i class="ti ti-map-pin"></i><span class="text-truncate">' + escapeHtml(scope) + '</span></div>' +
+      '<ul class="navbar-nav pt-lg-1">' + nav +
+      // Telefonda profil / cikis menunun sonunda
+      '<li class="nav-section d-lg-none">Hesap</li>' +
+      '<li class="nav-item d-lg-none"><a class="nav-link" href="/profile"><span class="nav-link-icon"><i class="ti ti-user-circle"></i></span><span class="nav-link-title">Profilim</span></a></li>' +
+      '<li class="nav-item d-lg-none"><a class="nav-link" href="/logout"><span class="nav-link-icon"><i class="ti ti-logout"></i></span><span class="nav-link-title">Çıkış Yap</span></a></li>' +
+      '</ul>' +
+      // Masaustunde menunun altinda kullanici karti
+      '<div class="sidebar-user d-none d-lg-block"><div class="d-flex align-items-center gap-2">' +
+      '<span class="avatar avatar-sm">' + escapeHtml(initials) + '</span>' +
+      '<div class="min-w-0 flex-fill"><div class="name text-truncate">' + escapeHtml(me.displayName) + '</div><div class="role text-truncate">' + escapeHtml(me.roleLabel) + '</div></div>' +
+      '<a href="#" class="btn btn-icon btn-sm" data-theme-toggle title="Koyu / açık tema"><i class="ti ' + themeIcon + '"></i></a>' +
+      '<div class="dropdown dropup"><a href="#" class="btn btn-icon btn-sm" data-bs-toggle="dropdown" title="Hesap"><i class="ti ti-dots-vertical"></i></a>' +
+      '<div class="dropdown-menu dropdown-menu-end">' +
+      '<div class="px-3 py-2 small text-secondary">' + escapeHtml(me.email || me.username) + '</div>' +
+      '<a href="/profile" class="dropdown-item"><i class="ti ti-user-circle me-2"></i>Profilim</a>' +
+      '<a href="/profile#sessions" class="dropdown-item"><i class="ti ti-devices me-2"></i>Oturumlarım</a>' +
+      '<div class="dropdown-divider"></div><a href="/logout" class="dropdown-item text-danger"><i class="ti ti-logout me-2"></i>Çıkış Yap</a>' +
+      '</div></div></div></div>' +
+      '</div></div></aside>';
     document.querySelectorAll('[data-theme-toggle]').forEach(function (a) {
       a.addEventListener('click', function (e) { e.preventDefault(); toggleTheme(); });
     });
     document.title = document.title.replace(/·.*$/, '').trim() + ' · ' + (me.companyName || 'E-Paper');
   }
+
+  // "Yukleniyor..." satirlarini iskelet animasyonuna cevir.
+  function skeletons() {
+    document.querySelectorAll('tbody > tr > td[colspan]').forEach(function (td) {
+      if (td.textContent.trim() !== 'Yükleniyor...') return;
+      var cols = parseInt(td.getAttribute('colspan'), 10) || 1;
+      var tr = td.parentNode, tbody = tr.parentNode;
+      var row = '<tr>' + Array.from({ length: cols }, function (_, i) { return '<td><div class="skeleton-line" style="width:' + (i === 0 ? 70 : 40 + ((i * 17) % 45)) + '%"></div></td>'; }).join('') + '</tr>';
+      tbody.innerHTML = row + row + row;
+    });
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', skeletons); else skeletons();
 
   var meReady = apiRequest('GET', '/api/me').then(function (me) {
     window.currentUser = me;

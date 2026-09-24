@@ -29,6 +29,7 @@ app.use('/vendor/tabler', vendor('@tabler/core/dist'));
 app.use('/vendor/tabler-icons', vendor('@tabler/icons-webfont/dist'));
 app.use('/vendor/xlsx', vendor('xlsx/dist'));
 app.use('/vendor/html5-qrcode', vendor('html5-qrcode'));
+app.use('/vendor/inter', vendor('@fontsource-variable/inter'));
 
 app.get('/favicon.ico', (req, res) => res.type('image/svg+xml').sendFile(path.join(PUBLIC_DIR, 'static', 'favicon.svg')));
 
