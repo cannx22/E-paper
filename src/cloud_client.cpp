@@ -118,6 +118,12 @@ static void handleMessage(uint8_t *payload, size_t length) {
         }
         g_pendingJob = doc;
         g_hasPendingJob = true;
+        // Sunucuya "aldim" bildir (kuyrukta durum: Gateway aldi); asil sonuc
+        // nRF gonderimi bitince "result" ile gider.
+        JsonDocument ack;
+        ack["type"] = "ack";
+        ack["reqId"] = doc["reqId"] | "";
+        sendJson(ack);
     } else if (type == "command") {
         g_pendingCommand = doc["command"] | "";
     } else if (type == "error") {

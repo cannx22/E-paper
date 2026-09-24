@@ -4,6 +4,7 @@ const express = require('express');
 const db = require('./db');
 const auth = require('./auth');
 const gateways = require('./gateways');
+const queue = require('./queue');
 const { importLegacyJson } = require('./db/importLegacy');
 const { HttpError } = require('./routes/util');
 const { can } = require('./permissions');
@@ -48,6 +49,8 @@ app.get('/', auth.requirePage(), (req, res, next) => {
 app.get('/dashboard', auth.requirePage(), page('dashboard.html'));
 app.get('/profile', auth.requirePage(), page('profile.html'));
 app.get('/history', auth.requirePage('audit.view'), page('history.html'));
+app.get('/updates', auth.requirePage('audit.view'), page('updates.html'));
+app.get('/updates/:id', auth.requirePage('audit.view'), page('update-batch.html'));
 app.get('/devices', auth.requirePage('device.view'), page('devices.html'));
 app.get('/devices/:serial', auth.requirePage('device.view'), page('device.html'));
 app.get('/gateways', auth.requirePage('gateway.view'), page('gateways.html'));
@@ -68,6 +71,7 @@ app.use('/api', require('./routes/users').api);
 app.use('/api', require('./routes/gateways').api);
 app.use('/api', require('./routes/devices').api);
 app.use('/api', require('./routes/labels').api);
+app.use('/api', require('./routes/updates').api);
 app.use('/api', require('./routes/reports').api);
 app.use('/api', require('./routes/admin').api);
 app.use('/api', (req, res) => res.status(404).type('text').send('HATA: Bulunamadi.'));
@@ -87,11 +91,13 @@ async function start() {
 
   const server = http.createServer(app);
   gateways.attach(server);
+  await queue.start();
   server.listen(PORT, () => {
     console.log(`Sunucu ${PORT} portunda calisiyor (gateway WebSocket: /ws/gateway)`);
   });
 
   const shutdown = () => {
+    queue.stop();
     server.close();
     db.close().finally(() => process.exit(0));
   };

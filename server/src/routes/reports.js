@@ -107,6 +107,15 @@ api.get('/dashboard', auth.requireApi(), async (req, res) => {
   counts.devices = dev.total;
   counts.devicesUnassigned = dev.unassigned;
   counts.devicesLastFailed = dev.last_failed;
+  const qParams = [];
+  const q = await db.one(
+    `SELECT count(*) FILTER (WHERE j.status IN ('queued', 'sending', 'received'))::int AS pending,
+            count(*) FILTER (WHERE j.status IN ('failed', 'unreachable') AND j.finished_at > now() - interval '24 hours')::int AS failed24h
+       FROM update_jobs j WHERE ${scopeSql(user, 'j', qParams)}`,
+    qParams,
+  );
+  counts.pendingUpdates = q.pending;
+  counts.failedUpdates24h = q.failed24h;
 
   const aParams = [];
   const sends = await db.one(

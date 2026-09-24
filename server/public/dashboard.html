@@ -64,7 +64,7 @@
 <script>
 var e = App.escapeHtml;
 function stat(value, label, icon, color, href, sub){
-  return '<div class="col-6 col-md-4 col-xl-2"><a class="card card-sm stat-card card-link text-reset" href="' + href + '"><div class="card-body"><div class="d-flex align-items-center gap-3">' +
+  return '<div class="col-6 col-md-4 col-lg-3 col-xxl"><a class="card card-sm stat-card card-link text-reset" href="' + href + '"><div class="card-body"><div class="d-flex align-items-center gap-3">' +
     '<span class="avatar bg-' + color + '-lt flex-shrink-0"><i class="ti ' + icon + ' fs-2"></i></span><div class="min-w-0">' +
     '<div class="stat-value">' + value + '</div><div class="stat-label">' + label + '</div>' +
     (sub ? '<div class="small text-secondary lh-sm">' + sub + '</div>' : '') + '</div></div></div></a></div>';
@@ -79,6 +79,7 @@ function refresh(){
     html += stat(c.branches, 'Şube', 'ti-building', 'blue', currentUser.can['branch.view'] ? '/branches' : '#');
     html += stat(c.gateways, 'Gateway', 'ti-router', 'cyan', '/gateways', s.active + ' aktif, ' + (s.offline + s.error) + ' sorunlu');
     html += stat(c.devices, 'Cihaz', 'ti-tags', 'green', '/devices', c.devicesUnassigned + ' gateway\'siz');
+    html += stat(c.pendingUpdates, 'Bekleyen', 'ti-clock', c.pendingUpdates ? 'yellow' : 'secondary', '/updates', 'güncelleme');
     html += stat(d.sends24h.ok, 'Başarılı', 'ti-circle-check', 'teal', '/history?type=labels', 'son 24 saat');
     html += stat(d.sends24h.failed, 'Başarısız', 'ti-circle-x', d.sends24h.failed ? 'red' : 'secondary', '/history?type=failed', 'son 24 saat');
     document.getElementById('stats').innerHTML = html;

@@ -553,6 +553,17 @@ document.getElementById('f').addEventListener('submit', function(e){
   var btn = document.getElementById('sendBtn');
   var values = collectFormValues();
   res.hidden = false;
+  if (multiTargets){
+    App.setBusy(btn, true);
+    var fields = Object.assign({}, values); delete fields.serial;
+    App.apiRequest('POST', '/api/updates', {source: 'bulk', name: (values.name || 'Etiket') + ' → ' + multiTargets.length + ' cihaz', serials: multiTargets, fields: fields})
+      .then(function(r){
+        try { sessionStorage.removeItem('epaper-bulk-serials'); } catch (e) {}
+        location.href = '/updates/' + r.batchId;
+      })
+      .catch(function(err){ App.setBusy(btn, false); res.className = 'alert alert-danger mt-3'; res.textContent = err.message; });
+    return;
+  }
   if (!isValidSerial(values.serial)){
     res.className = 'alert alert-danger mt-3';
     res.textContent = 'Seri numarası 8 haneli olmalı.';
@@ -562,8 +573,11 @@ document.getElementById('f').addEventListener('submit', function(e){
   App.setBusy(btn, true);
   sendLabelRequest(values, gatewaySelect.value)
     .then(function(result){
-      res.className = 'alert mt-3 ' + (result.ok ? 'alert-success' : 'alert-danger');
-      res.textContent = result.txt.replace(/^HATA:\s*/, '');
+      // 200 basarili, 202 kuyrukta (gateway cevrimdisi / tekrar denenecek), digerleri hata
+      var queued = result.status === 202;
+      res.className = 'alert mt-3 ' + (result.ok && !queued ? 'alert-success' : queued ? 'alert-warning' : 'alert-danger');
+      res.innerHTML = '<div>' + escapeHtml(result.txt.replace(/^HATA:\s*/, '')) +
+        (queued ? ' <a href="/updates?serial=' + encodeURIComponent(values.serial) + '">Takip et</a>' : '') + '</div>';
       if (result.ok) loadDevices();
     })
     .catch(function(err){
@@ -583,7 +597,7 @@ function sendLabelRequest(values, gatewayId){
     headers: {'Content-Type': 'application/json'},
     body: JSON.stringify(body)
   }).then(function(resp){
-    return resp.text().then(function(txt){ return {ok: resp.ok, txt: txt}; });
+    return resp.text().then(function(txt){ return {ok: resp.ok, status: resp.status, txt: txt}; });
   });
 }
 
@@ -696,48 +710,71 @@ document.getElementById('parseExcelBtn').addEventListener('click', function(){
   reader.readAsArrayBuffer(fileInput.files[0]);
 });
 
-// Toplu gonderimde MAX_RT hatasi (etiket onceki veriyi/ekrani islerken meşgul
-// oldugu icin) tekli gonderimden farkli olarak burada satir bazinda otomatik
-// yeniden deneniyor - tekli gonderim yolunu etkilemez, sadece bu toplu
-// akista devreye girer. Kayitli cihazlar kendi gateway'lerine, kayitli
-// olmayan seri no'lar yukarida secili gateway'e gonderilir.
-var BULK_MAX_RETRIES = 2;       // ilk denemeden sonra en fazla kac kez daha denensin
-var BULK_RETRY_DELAY_MS = 5000; // yeniden denemeler arasi sabit bekleme
-
-async function sendBulkSequential(){
-  var statusCells = document.querySelectorAll('#bulkTable tbody tr .bulk-status');
-  for (var i = 0; i < bulkRows.length; i++){
-    var r = bulkRows[i];
-    var attempt = 0;
-    var result = null;
-    while (attempt <= BULK_MAX_RETRIES) {
-      statusCells[i].textContent = attempt === 0 ? 'Gönderiliyor...' : ('Tekrar deneniyor (' + attempt + '/' + BULK_MAX_RETRIES + ')...');
-      statusCells[i].className = 'bulk-status';
-      try {
-        if (!isValidSerial(r.serial)) {
-          result = {ok: false, txt: 'HATA: Seri numarası 8 haneli olmalı.'};
-          break;
-        }
-        var registered = deviceMap[r.serial];
-        result = await sendLabelRequest(r, registered && registered.gatewayId ? null : gatewaySelect.value);
-      } catch (err) {
-        result = {ok: false, txt: 'HATA: ' + err};
-      }
-      if (result.ok) break;
-      attempt++;
-      if (attempt <= BULK_MAX_RETRIES) {
-        await new Promise(function(resolve){ setTimeout(resolve, BULK_RETRY_DELAY_MS); });
-      }
+// ---- Toplu gonderim: sunucuda bir "toplu is" olarak kuyruga alinir. Tekrar
+// denemeler, gateway cevrimdisiyken bekleme ve siralama kuyrukta yapilir;
+// sayfa kapansa da gonderim devam eder. Kayitli cihazlar kendi gateway'lerini
+// kullanir, kayitli olmayan seri no'lar yukarida secili gateway'e gider. ----
+var bulkPollTimer = null;
+function fieldsOf(r){
+  var f = {};
+  ['templateID', 'discountEnabled', 'campaignEnabled', 'business', 'name', 'subtitle', 'price', 'oldPrice', 'unit', 'bottomCode', 'barcode'].forEach(function(k){ f[k] = r[k]; });
+  return f;
+}
+function setRowStatus(serial, html, cls){
+  document.querySelectorAll('#bulkTable tbody tr').forEach(function(tr, i){
+    if (bulkRows[i] && bulkRows[i].serial === serial){
+      var c = tr.querySelector('.bulk-status');
+      c.innerHTML = html; c.className = 'bulk-status ' + (cls || '');
     }
-    statusCells[i].textContent = result.txt;
-    statusCells[i].className = 'bulk-status ' + (result.ok ? 'ok' : 'err');
-
-    await new Promise(function(resolve){ setTimeout(resolve, 250); });
-  }
-  document.getElementById('bulkLog').textContent = 'Toplu gönderim tamamlandı (' + bulkRows.length + ' satır).';
+  });
+}
+function pollBatch(batchId){
+  clearTimeout(bulkPollTimer);
+  App.apiRequest('GET', '/api/updates/batches/' + batchId).then(function(b){
+    b.jobs.forEach(function(j){ setRowStatus(j.serial, App.jobBadge(j.status) + (j.message && j.status !== 'success' ? ' <span class="small text-secondary">' + escapeHtml(j.message.replace(/^HATA:\s*/, '')) + '</span>' : '')); });
+    var c = b.counts, pending = c.queued + c.sending;
+    document.getElementById('bulkLog').innerHTML = (b.finished_at ? '<b>Tamamlandı:</b> ' : '<b>Gönderiliyor:</b> ') +
+      c.success + ' başarılı, ' + (c.unreachable + c.failed) + ' sorunlu, ' + pending + ' bekleyen. <a href="/updates/' + b.id + '">Toplu işi aç</a>';
+    if (!b.finished_at) bulkPollTimer = setTimeout(function(){ pollBatch(batchId); }, 2000);
+    else { document.getElementById('bulkSendBtn').disabled = false; loadDevices(); }
+  }).catch(function(){ bulkPollTimer = setTimeout(function(){ pollBatch(batchId); }, 4000); });
 }
 document.getElementById('bulkSendBtn').addEventListener('click', function(){
   var btn = document.getElementById('bulkSendBtn');
+  var items = bulkRows.map(function(r){
+    var registered = deviceMap[r.serial];
+    return {serial: r.serial, gatewayId: registered && registered.gatewayId ? null : (gatewaySelect.value || null), fields: fieldsOf(r)};
+  });
+  var fileInput = document.getElementById('excelFileInput');
+  var name = 'Excel: ' + (fileInput.files && fileInput.files[0] ? fileInput.files[0].name : bulkRows.length + ' satır');
   btn.disabled = true;
-  sendBulkSequential().then(function(){ btn.disabled = false; });
+  App.apiRequest('POST', '/api/updates', {source: 'excel', name: name, items: items}).then(function(r){
+    r.skipped.forEach(function(s){ setRowStatus(s.serial, '<span class="text-danger">' + escapeHtml(s.message) + '</span>', 'err'); });
+    App.toast(r.queued + ' satır kuyruğa alındı' + (r.skipped.length ? ', ' + r.skipped.length + ' satır atlandı' : '') + '.');
+    pollBatch(r.batchId);
+  }).catch(function(err){
+    btn.disabled = false;
+    App.toast(err.message, 'danger');
+  });
 });
+
+// ---- Coklu hedef: Cihazlar sayfasinda secilen cihazlara ayni icerik ----
+// Secim sessionStorage'da tasinir (?bulk=1). Gonderince toplu is olusur ve
+// ilerleme sayfasina gecilir.
+var multiTargets = null;
+(function initMultiTarget(){
+  if (new URLSearchParams(location.search).get('bulk') !== '1') return;
+  try { multiTargets = JSON.parse(sessionStorage.getItem('epaper-bulk-serials') || 'null'); } catch (e) {}
+  if (!multiTargets || !multiTargets.length) { multiTargets = null; return; }
+  var card = serialInput.closest('.card-body');
+  serialInput.required = false;
+  serialInput.closest('.col-md-6').hidden = true;
+  gatewaySelect.closest('.col-md-6').hidden = true;
+  card.insertAdjacentHTML('afterbegin',
+    '<div class="alert alert-info mb-0" id="multiInfo"><div class="d-flex w-100 align-items-center gap-2"><i class="ti ti-tags fs-2"></i><div class="flex-fill">' +
+    '<b>' + multiTargets.length + ' cihaz seçildi.</b> Aynı içerik tüm seçili cihazlara toplu iş olarak gönderilecek; her cihaz kendi gateway\'ini kullanır.' +
+    '<div class="small text-secondary mono mt-1">' + escapeHtml(multiTargets.slice(0, 12).join(', ')) + (multiTargets.length > 12 ? ' ... (+' + (multiTargets.length - 12) + ')' : '') + '</div></div>' +
+    '<a href="/" class="btn btn-sm">Tekli gönderime dön</a></div></div>');
+  document.getElementById('sendBtn').innerHTML = '<i class="ti ti-send me-2"></i>' + multiTargets.length + ' Cihaza Gönder';
+})();
+

@@ -141,6 +141,16 @@ api.post('/settings', auth.requireApi('settings.manage'), async (req, res) => {
     if (!Number.isInteger(n) || n < 6 || n > 64) fail(400, 'Minimum sifre uzunlugu 6-64 arasi olmali.');
     await settings.set('password_min_length', n);
   }
+  if (b.queue_max_attempts !== undefined) {
+    const n = Number(b.queue_max_attempts);
+    if (!Number.isInteger(n) || n < 1 || n > 10) fail(400, 'Deneme sayisi 1-10 arasi olmali.');
+    await settings.set('queue_max_attempts', n);
+  }
+  if (b.queue_ttl_hours !== undefined) {
+    const n = Number(b.queue_ttl_hours);
+    if (!Number.isInteger(n) || n < 1 || n > 24 * 30) fail(400, 'Bekleme suresi 1-720 saat arasi olmali.');
+    await settings.set('queue_ttl_hours', n);
+  }
   const after = await settings.all();
   await audit.log(req.user, 'settings.updated', { entityType: 'settings', dealerId: null, branchId: null, details: { before, after } });
   res.json(after);

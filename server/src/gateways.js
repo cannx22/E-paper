@@ -13,6 +13,7 @@
 //   srv -> gw   {type:"send", reqId, serial:"12345678", fields:{...}}
 //               serial: hedef e-paper cihazin 8 haneli seri numarasi; nRF24
 //               adresine (BCD) cevirme gateway ve alici tarafinda yapilir.
+//   gw  -> srv  {type:"ack", reqId}                    (istege bagli: "gateway aldi")
 //   gw  -> srv  {type:"result", reqId, ok, message}
 //   srv -> gw   {type:"command", command:"restart"|"wifi_reset"}
 //   srv -> gw   {type:"error", error}                   (ardindan baglanti kapanir)
@@ -26,6 +27,7 @@
 // Birden fazla sunucu ornegine gecildiginde (yatay olcekleme) baglanti
 // yonlendirmesi Redis gibi ortak bir kanala tasinmali.
 const crypto = require('crypto');
+const { EventEmitter } = require('events');
 const { WebSocketServer } = require('ws');
 const db = require('./db');
 const audit = require('./audit');
@@ -36,6 +38,8 @@ const SEND_TIMEOUT_MS = 20000;
 const PING_INTERVAL_MS = 25000;
 
 const connections = new Map(); // id -> Connection
+// 'online' (gatewayId) / 'offline' (gatewayId): kuyruk dagiticisi dinler.
+const events = new EventEmitter();
 
 // ---- Gateway durumu (panelde gosterilen) ----
 // Kalici yasam dongusu (state) + calisma anindaki baglanti/telemetri.
@@ -94,11 +98,20 @@ class Connection {
 
   // Gateway ayni anda tek etiket gonderebildigi icin (nRF tek radyo) istekler
   // sirayla, bir oncekinin sonucu gelince gonderilir.
-  enqueueSend(serial, fields) {
+  // onAck: gateway "aldim" dediginde cagrilir (firmware destekliyorsa).
+  enqueueSend(serial, fields, onAck) {
     return new Promise((resolve) => {
-      this.queue.push({ serial, fields, resolve });
+      this.queue.push({ serial, fields, onAck, resolve });
       this.pump();
     });
+  }
+
+  ack(reqId) {
+    if (this.current && this.current.reqId === reqId && this.current.onAck) {
+      const cb = this.current.onAck;
+      this.current.onAck = null;
+      cb();
+    }
   }
 
   pump() {
@@ -106,9 +119,9 @@ class Connection {
     const job = this.queue.shift();
     const reqId = String(this.nextReqId++);
     const timer = setTimeout(() => {
-      this.finish(reqId, { ok: false, message: 'HATA: Gateway zamaninda cevap vermedi.' });
+      this.finish(reqId, { ok: false, timeout: true, message: 'HATA: Gateway zamaninda cevap vermedi.' });
     }, SEND_TIMEOUT_MS);
-    this.current = { reqId, resolve: job.resolve, timer };
+    this.current = { reqId, resolve: job.resolve, onAck: job.onAck, timer };
     try {
       this.sendJson({ type: 'send', reqId, serial: job.serial, fields: job.fields });
     } catch (err) {
@@ -125,9 +138,11 @@ class Connection {
     this.pump();
   }
 
+  // Baglanti koptugunda bekleyenler "disconnected" ile doner (kuyruk isi
+  // deneme saymadan yeniden siraya alir).
   failAll(message) {
-    if (this.current) this.finish(this.current.reqId, { ok: false, message });
-    for (const job of this.queue.splice(0)) job.resolve({ ok: false, message });
+    if (this.current) this.finish(this.current.reqId, { ok: false, disconnected: true, message });
+    for (const job of this.queue.splice(0)) job.resolve({ ok: false, disconnected: true, message });
   }
 }
 
@@ -190,6 +205,7 @@ async function handleHello(ws, req, msg) {
   connections.set(id, conn);
   conn.sendJson({ type: 'hello_ack', status: gw.state, name: gw.name });
   logEvent(id, 'connected', ip, `fw ${gw.fw_version}`);
+  events.emit('online', id);
   console.log(`[gw ${id}] baglandi (${ip}, fw ${gw.fw_version}, nrf ${gw.nrf_ok ? 'hazir' : 'YOK'}, ${gw.state})`);
   return conn;
 }
@@ -250,7 +266,9 @@ function attach(httpServer) {
         }
         return;
       }
-      if (msg.type === 'result') {
+      if (msg.type === 'ack') {
+        conn.ack(String(msg.reqId));
+      } else if (msg.type === 'result') {
         db.query('UPDATE gateways SET last_message_at = now(), last_seen_at = now() WHERE id = $1', [conn.id]).catch(() => {});
         conn.finish(String(msg.reqId), {
           ok: !!msg.ok,
@@ -269,6 +287,7 @@ function attach(httpServer) {
         connections.delete(conn.id);
         db.query('UPDATE gateways SET last_seen_at = now() WHERE id = $1', [conn.id]).catch(() => {});
         logEvent(conn.id, 'disconnected', conn.info.ip);
+        events.emit('offline', conn.id);
         console.log(`[gw ${conn.id}] baglanti kapandi`);
       }
     });
@@ -293,17 +312,15 @@ function attach(httpServer) {
 
 function isOnline(id) { return connections.has(id); }
 
-// Etiketi gateway'e iletir. Kapsam/yetki kontrolu cagiran tarafta yapilir;
-// burada sadece gateway'in gonderime uygun durumda olup olmadigina bakilir.
-async function sendLabel(gw, serial, fields) {
-  if (gw.dealer_active === false) return { ok: false, status: 409, message: 'HATA: Gateway\'in bagli oldugu bayi pasif.' };
-  if (gw.state === 'disabled') return { ok: false, status: 409, message: 'HATA: Gateway devre disi.' };
-  if (gw.state !== 'active') return { ok: false, status: 409, message: 'HATA: Gateway henuz aktif degil.' };
-  const conn = connections.get(gw.id);
-  if (!conn) return { ok: false, status: 503, message: 'HATA: Gateway cevrimdisi (sunucuya bagli degil).' };
-  const result = await conn.enqueueSend(serial, fields);
-  return { ...result, status: result.ok ? 200 : 502 };
+// Kuyruk dagiticisinin kullandigi gonderim: etiketi bagli gateway'e iletir,
+// sonucu doner. { ok, message, timeout?, disconnected?, offline? }
+async function dispatch(gatewayId, serial, fields, onAck) {
+  const conn = connections.get(gatewayId);
+  if (!conn) return { ok: false, offline: true, message: 'HATA: Gateway cevrimdisi.' };
+  return conn.enqueueSend(serial, fields, onAck);
 }
+
+function onlineIds() { return Array.from(connections.keys()); }
 
 async function notifyStatus(id) {
   const conn = connections.get(id);
@@ -328,5 +345,5 @@ function disconnect(id) {
 
 module.exports = {
   STATUS_LABELS, displayStatus,
-  attach, isOnline, sendLabel, notifyStatus, sendCommand, disconnect,
+  events, attach, isOnline, onlineIds, dispatch, notifyStatus, sendCommand, disconnect,
 };

@@ -5,6 +5,8 @@ const DEFAULTS = {
   company_name: 'E-Paper Yönetim',
   inventory_required: false,
   password_min_length: 8,
+  queue_max_attempts: 3,  // basarisiz guncelleme en fazla kac kez denensin
+  queue_ttl_hours: 72,    // gonderilemeyen guncelleme kac saat sonra "suresi doldu" olsun
 };
 
 let cache = null;

@@ -101,8 +101,26 @@
     'device.created': 'Cihaz eklendi', 'device.imported': 'Toplu cihaz ekleme', 'device.updated': 'Cihaz güncellendi', 'device.deleted': 'Cihaz silindi',
     'device.bulk_assign': 'Toplu cihaz atama', 'device.bulk_disable': 'Toplu devre dışı', 'device.bulk_enable': 'Toplu etkinleştirme', 'device.bulk_delete': 'Toplu cihaz silme',
     'inventory.imported': 'Havuza seri no eklendi', 'inventory.allocated': 'Seri no tahsis edildi', 'inventory.unallocated': 'Seri no tahsisi kaldırıldı', 'inventory.deleted': 'Havuzdan seri no silindi',
-    'settings.updated': 'Ayarlar güncellendi'
+    'settings.updated': 'Ayarlar güncellendi',
+    'update.batch_cancelled': 'Toplu iş iptal edildi', 'update.batch_retried': 'Toplu iş tekrar denendi', 'update.job_cancelled': 'Güncelleme iptal edildi'
   };
+  var JOB_STATUS = {
+    queued: ['Bekliyor', 'yellow', 'ti-clock'], sending: ['Gönderiliyor', 'blue', 'ti-loader-2'], received: ['Gateway aldı', 'cyan', 'ti-router'],
+    success: ['Başarılı', 'green', 'ti-circle-check'], unreachable: ['Cihaz ulaşılamıyor', 'orange', 'ti-antenna-bars-off'],
+    failed: ['Hata', 'red', 'ti-circle-x'], cancelled: ['İptal', 'secondary', 'ti-ban'], expired: ['Süresi doldu', 'secondary', 'ti-hourglass-off']
+  };
+  function jobBadge(status) {
+    var s = JOB_STATUS[status] || [status, 'secondary', 'ti-point'];
+    return '<span class="badge bg-' + s[1] + '-lt"><i class="ti ' + s[2] + ' me-1"></i>' + escapeHtml(s[0]) + '</span>';
+  }
+  // Toplu is ilerleme cubugu: counts {total, success, unreachable, failed, cancelled, sending, queued}
+  function batchProgress(c, height) {
+    var t = c.total || 1;
+    var seg = function (n, color, title) { return n ? '<div class="progress-bar bg-' + color + '" style="width:' + (n * 100 / t) + '%" title="' + title + ': ' + n + '"></div>' : ''; };
+    return '<div class="progress progress-separated" style="height:' + (height || '.55rem') + '">' +
+      seg(c.success, 'green', 'Başarılı') + seg(c.unreachable, 'orange', 'Ulaşılamıyor') + seg(c.failed, 'red', 'Hata') +
+      seg(c.cancelled, 'secondary', 'İptal') + seg(c.sending, 'blue', 'Gönderiliyor') + '</div>';
+  }
   function statusBadge(status, label) {
     return '<span class="badge st st-' + escapeHtml(status) + '"><span class="status-dot"></span>' + escapeHtml(label || STATUS_LABELS[status] || status) + '</span>';
   }
@@ -248,6 +266,7 @@
     var items = [
       { href: '/dashboard', icon: 'ti-layout-dashboard', text: 'Genel Bakış' },
       c['label.send'] && { href: '/', icon: 'ti-send', text: 'Etiket Gönder' },
+      c['audit.view'] && { href: '/updates', icon: 'ti-list-check', text: 'Güncellemeler', match: /^\/updates/ },
       { href: '/devices', icon: 'ti-tags', text: 'Cihazlar', match: /^\/devices/ },
       { href: '/gateways', icon: 'ti-router', text: 'Gateway\'ler', match: /^\/gateways/ },
       { section: 'Yönetim' },
@@ -323,7 +342,8 @@
   window.App = {
     escapeHtml: escapeHtml, formatDate: formatDate, formatRelative: formatRelative, formatDuration: formatDuration,
     apiRequest: apiRequest, fillSelect: fillSelect, formData: formData, fillForm: fillForm, qs: qs,
-    STATUS_LABELS: STATUS_LABELS, ROLE_LABELS: ROLE_LABELS, AUDIT_LABELS: AUDIT_LABELS,
+    STATUS_LABELS: STATUS_LABELS, ROLE_LABELS: ROLE_LABELS, AUDIT_LABELS: AUDIT_LABELS, JOB_STATUS: JOB_STATUS,
+    jobBadge: jobBadge, batchProgress: batchProgress,
     statusBadge: statusBadge, roleBadge: roleBadge, activeBadge: activeBadge, emptyRow: emptyRow,
     toast: toast, dialog: dialog, confirm: confirmDialog, prompt: promptDialog, secret: secretDialog, copyText: copyText,
     showModal: showModal, hideModal: hideModal, setBusy: setBusy, showMsg: showMsg, hideMsg: hideMsg,

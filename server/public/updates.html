@@ -1,0 +1,159 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Güncellemeler</title>
+<script src="/static/theme-boot.js"></script>
+<link rel="stylesheet" href="/vendor/tabler/css/tabler.min.css">
+<link rel="stylesheet" href="/vendor/tabler-icons/tabler-icons.min.css">
+<link rel="stylesheet" href="/static/app.css">
+</head>
+<body>
+<div class="page">
+<div id="app-sidebar"></div>
+<div class="page-wrapper">
+  <div class="page-header d-print-none"><div class="container-xl"><div class="row g-2 align-items-center">
+    <div class="col"><div class="page-pretitle">Kalıcı güncelleme kuyruğu</div><h2 class="page-title"><i class="ti ti-list-check me-2"></i>Güncellemeler</h2></div>
+    <div class="col-auto ms-auto"><div class="btn-list">
+      <a href="/devices" class="btn" data-can="label.send"><i class="ti ti-checkbox me-1"></i>Cihaz Seçip Toplu Gönder</a>
+      <a href="/#bulk" class="btn btn-primary" data-can="label.send"><i class="ti ti-file-spreadsheet me-1"></i>Excel ile Toplu</a>
+    </div></div>
+  </div></div></div>
+
+  <div class="page-body"><div class="container-xl">
+    <div class="row row-cards mb-3" id="stats"></div>
+
+    <div class="card">
+      <div class="card-header">
+        <ul class="nav nav-tabs card-header-tabs" data-bs-toggle="tabs">
+          <li class="nav-item"><a href="#tab-batches" class="nav-link active" data-bs-toggle="tab"><i class="ti ti-stack-2 me-1"></i>Toplu İşler</a></li>
+          <li class="nav-item"><a href="#tab-jobs" class="nav-link" data-bs-toggle="tab"><i class="ti ti-list me-1"></i>Tüm Güncellemeler</a></li>
+        </ul>
+      </div>
+      <div class="tab-content">
+        <div class="tab-pane active show" id="tab-batches">
+          <div class="table-responsive">
+            <table class="table table-vcenter card-table table-hover">
+              <thead><tr><th>Toplu İş</th><th>İlerleme</th><th>Başarılı</th><th>Sorunlu</th><th>Bekleyen</th><th>Başlatan</th><th>Durum</th></tr></thead>
+              <tbody id="batchBody"><tr><td colspan="7" class="text-secondary">Yükleniyor...</td></tr></tbody>
+            </table>
+          </div>
+        </div>
+        <div class="tab-pane" id="tab-jobs">
+          <div class="card-body border-bottom py-3">
+            <div class="row g-2">
+              <div class="col-md-3"><select class="form-select" id="fStatus">
+                <option value="">Tüm durumlar</option><option value="active">Bekleyen / gönderilen</option><option value="failed">Hatalı / ulaşılamayan</option>
+                <option value="done">Başarılı</option><option value="cancelled">İptal / süresi dolan</option></select></div>
+              <div class="col-md-3"><input class="form-control mono" id="fSerial" maxlength="8" placeholder="Seri no" inputmode="numeric"></div>
+              <div class="col-md-3"><label class="form-check mt-2"><input class="form-check-input" type="checkbox" id="fSingle"><span class="form-check-label">Sadece tekli gönderimler</span></label></div>
+            </div>
+          </div>
+          <div class="table-responsive">
+            <table class="table table-vcenter card-table">
+              <thead><tr><th>#</th><th>Cihaz</th><th>İçerik</th><th>Gateway</th><th>Durum</th><th>Deneme</th><th>Zaman</th><th class="w-1"></th></tr></thead>
+              <tbody id="jobBody"></tbody>
+            </table>
+          </div>
+          <div class="card-footer text-center" id="moreWrap" hidden><button class="btn" id="moreBtn">Daha fazla</button></div>
+        </div>
+      </div>
+    </div>
+    <div class="text-secondary small mt-2"><i class="ti ti-info-circle me-1"></i>Gateway çevrimdışıyken güncellemeler bekler ve gateway bağlanınca kendiliğinden gönderilir. Cihaza ulaşılamazsa artan aralıklarla tekrar denenir. Aynı cihaza yeni içerik gönderilirse bekleyen eski içerik iptal edilir. Sayfa 3 saniyede bir yenilenir.</div>
+  </div></div>
+</div></div>
+<script src="/vendor/tabler/js/tabler.min.js"></script>
+<script src="/static/app.js"></script>
+<script>
+var e = App.escapeHtml, $ = function(id){ return document.getElementById(id); };
+var PAGE = 100, jobs = [], lastJobId = null;
+var SOURCES = {manual: 'Elle', bulk: 'Cihaz seçimi', excel: 'Excel', api: 'API', schedule: 'Zamanlama'};
+
+function stat(v, l, color, icon, sub){
+  return '<div class="col-6 col-lg"><div class="card card-sm stat-card"><div class="card-body"><div class="d-flex align-items-center gap-3"><span class="avatar bg-' + color + '-lt flex-shrink-0"><i class="ti ' + icon + ' fs-2"></i></span>' +
+    '<div><div class="stat-value">' + v + '</div><div class="stat-label">' + l + '</div>' + (sub ? '<div class="small text-secondary lh-sm">' + sub + '</div>' : '') + '</div></div></div></div></div>';
+}
+function content(f){ return f ? [f.name, f.price ? f.price + ' ' + (f.unit || '') : ''].filter(Boolean).join(' · ') : ''; }
+
+function loadSummary(){
+  return App.apiRequest('GET', '/api/updates/summary').then(function(s){
+    $('stats').innerHTML = stat(s.active.queued, 'Bekliyor', 'yellow', 'ti-clock', s.waitingOffline ? s.waitingOffline + ' tanesi gateway bekliyor' : 'sırada') +
+      stat(s.active.sending, 'Gönderiliyor', 'blue', 'ti-loader-2', 'şu an') +
+      stat(s.last24h.success, 'Başarılı', 'green', 'ti-circle-check', 'son 24 saat') +
+      stat(s.last24h.unreachable, 'Ulaşılamayan', 'orange', 'ti-antenna-bars-off', 'son 24 saat') +
+      stat(s.last24h.failed, 'Hatalı', 'red', 'ti-circle-x', 'son 24 saat');
+  });
+}
+function loadBatches(){
+  return App.apiRequest('GET', '/api/updates/batches?limit=50').then(function(list){
+    $('batchBody').innerHTML = list.length ? list.map(function(b){
+      var problem = b.unreachable + b.failed, pending = b.queued + b.sending;
+      var done = b.total - pending;
+      var state = b.finished_at ? (problem ? '<span class="badge bg-orange-lt">Tamamlandı (sorunlu)</span>' : '<span class="badge bg-green-lt">Tamamlandı</span>') : '<span class="badge bg-blue-lt"><i class="ti ti-loader-2 me-1"></i>Devam ediyor</span>';
+      return '<tr class="cursor-pointer" onclick="location.href=\'/updates/' + b.id + '\'"><td><div class="fw-bold">' + e(b.name) + '</div><div class="small text-secondary">#' + b.id + ' · ' + e(SOURCES[b.source] || b.source) + (b.dealer_name ? ' · ' + e(b.dealer_name) : '') + '</div></td>' +
+        '<td style="min-width:180px">' + App.batchProgress(b) + '<div class="small text-secondary mt-1">' + done + ' / ' + b.total + '</div></td>' +
+        '<td class="text-success fw-bold">' + b.success + '</td><td class="' + (problem ? 'text-danger fw-bold' : 'text-secondary') + '">' + problem + '</td><td>' + pending + '</td>' +
+        '<td class="small">' + e(b.username || '-') + '<div class="text-secondary">' + App.formatRelative(b.created_at) + '</div></td><td>' + state + '</td></tr>';
+    }).join('') : App.emptyRow(7, 'Henüz toplu güncelleme yok', 'ti-stack-2');
+  });
+}
+function jobRow(j){
+  var actions = '';
+  if (currentUser.can['label.send']){
+    if (j.status === 'queued') actions = '<button class="btn btn-sm btn-ghost-danger" data-cancel="' + j.id + '">İptal</button>';
+    else if (['failed', 'unreachable', 'expired'].indexOf(j.status) !== -1) actions = '<button class="btn btn-sm" data-retry="' + j.id + '">Tekrar Dene</button>';
+  }
+  var when = j.status === 'queued' && j.nextAttemptAt && new Date(j.nextAttemptAt) > new Date() ? 'tekrar: ' + App.formatRelative(j.nextAttemptAt).replace(' önce', ' sonra') : App.formatRelative(j.finishedAt || j.createdAt);
+  return '<tr><td class="text-secondary small">' + j.id + (j.batchId ? '<div><a href="/updates/' + j.batchId + '">toplu #' + j.batchId + '</a></div>' : '') + '</td>' +
+    '<td><a class="mono fw-bold" href="/devices/' + e(j.serial) + '">' + e(j.serial) + '</a><div class="small text-secondary">' + e(j.deviceName || '') + '</div></td>' +
+    '<td class="small">' + e(content(j.fields)) + '</td>' +
+    '<td class="small">' + (j.gatewayId ? '<span class="status-dot st ' + (j.gatewayOnline ? 'st-active' : 'st-offline') + '"></span>' + e(j.gatewayName || j.gatewayId) : '<span class="text-warning">gateway yok</span>') + '</td>' +
+    '<td>' + App.jobBadge(j.status) + (j.message && j.status !== 'success' ? '<div class="small text-secondary text-truncate" style="max-width:240px" title="' + e(j.message) + '">' + e(j.message.replace(/^HATA:\s*/, '')) + '</div>' : '') + '</td>' +
+    '<td>' + j.attempts + '/' + j.maxAttempts + '</td><td class="small text-secondary">' + when + '<div>' + e(j.username || '') + '</div></td><td>' + actions + '</td></tr>';
+}
+function jobQuery(before){
+  var p = ['limit=' + PAGE];
+  if ($('fStatus').value) p.push('status=' + $('fStatus').value);
+  var s = $('fSerial').value.replace(/\D/g, '');
+  if (s.length === 8) p.push('serial=' + s);
+  if ($('fSingle').checked) p.push('single=1');
+  if (before) p.push('before=' + before);
+  return '/api/updates/jobs?' + p.join('&');
+}
+function loadJobs(){
+  return App.apiRequest('GET', jobQuery()).then(function(list){
+    jobs = list;
+    $('jobBody').innerHTML = list.length ? list.map(jobRow).join('') : App.emptyRow(8, 'Kayıt yok', 'ti-list');
+    lastJobId = list.length ? list[list.length - 1].id : null;
+    $('moreWrap').hidden = list.length < PAGE;
+  });
+}
+$('moreBtn').addEventListener('click', function(){
+  App.apiRequest('GET', jobQuery(lastJobId)).then(function(list){
+    $('jobBody').insertAdjacentHTML('beforeend', list.map(jobRow).join(''));
+    if (list.length) lastJobId = list[list.length - 1].id;
+    $('moreWrap').hidden = list.length < PAGE;
+  });
+});
+['fStatus', 'fSingle'].forEach(function(id){ $(id).addEventListener('change', loadJobs); });
+$('fSerial').addEventListener('input', function(){ this.value = this.value.replace(/\D/g, ''); if (!this.value || this.value.length === 8) loadJobs(); });
+$('jobBody').addEventListener('click', function(ev){
+  var c = ev.target.closest('[data-cancel]'), r = ev.target.closest('[data-retry]');
+  if (!c && !r) return;
+  var req = c ? App.apiRequest('POST', '/api/updates/jobs/' + c.dataset.cancel + '/cancel', {}) : App.apiRequest('POST', '/api/updates/jobs/' + r.dataset.retry + '/retry', {});
+  req.then(function(){ App.toast(c ? 'Güncelleme iptal edildi.' : 'Tekrar kuyruğa alındı.'); refresh(); }).catch(function(err){ App.toast(err.message, 'danger'); });
+});
+function refresh(){
+  loadSummary(); loadBatches();
+  if ($('tab-jobs').classList.contains('active')) loadJobs();
+}
+document.querySelector('.nav-link[href="#tab-jobs"]').addEventListener('shown.bs.tab', loadJobs);
+document.querySelector('.nav-link[href="#tab-jobs"]').addEventListener('click', function(){ setTimeout(loadJobs, 50); });
+App.meReady.then(function(){
+  if (App.qs('serial')){ $('fSerial').value = App.qs('serial'); tabler.Tab.getOrCreateInstance(document.querySelector('.nav-link[href="#tab-jobs"]')).show(); }
+  refresh();
+});
+setInterval(function(){ if (!document.hidden) refresh(); }, 3000);
+</script>
+</body>
+</html>

@@ -37,6 +37,11 @@
         </div>
       </div>
       <div class="col-lg-8">
+        <div class="card mb-3" id="queueCard" hidden>
+          <div class="card-header"><h3 class="card-title"><i class="ti ti-clock me-2 text-warning"></i>Kuyrukta Bekleyen</h3>
+            <div class="card-actions"><a class="btn btn-sm" id="queueLink">Tümü</a></div></div>
+          <div class="list-group list-group-flush" id="queueList"></div>
+        </div>
         <div class="card">
           <div class="card-header"><h3 class="card-title"><i class="ti ti-history me-2 text-secondary"></i>Güncelleme ve İşlem Geçmişi</h3></div>
           <div class="table-responsive">
@@ -101,6 +106,17 @@ function load(){
     document.getElementById('info').innerHTML = '<div class="text-danger">' + e(err.message) + '</div>';
   });
 }
+function loadQueue(){
+  App.apiRequest('GET', '/api/updates/jobs?status=active&serial=' + encodeURIComponent(serial)).then(function(list){
+    document.getElementById('queueCard').hidden = !list.length;
+    document.getElementById('queueLink').href = '/updates?serial=' + encodeURIComponent(serial);
+    document.getElementById('queueList').innerHTML = list.map(function(j){
+      return '<div class="list-group-item"><div class="d-flex justify-content-between align-items-center gap-2"><div>' + e(contentSummary(j.fields)) +
+        '<div class="small text-secondary">' + (j.gatewayOnline ? 'gateway çevrimiçi' : 'gateway çevrimdışı, bağlanınca gönderilecek') + ' · deneme ' + j.attempts + '/' + j.maxAttempts +
+        (j.message ? ' · ' + e(j.message.replace(/^HATA:\s*/, '')) : '') + '</div></div>' + App.jobBadge(j.status) + '</div></div>';
+    }).join('');
+  }).catch(function(){});
+}
 document.getElementById('toggleBtn').addEventListener('click', function(){
   var next = dev.state === 'active' ? 'disabled' : 'active';
   App.apiRequest('POST', '/api/devices/' + serial, {state: next}).then(function(){ App.toast(next === 'active' ? 'Cihaz etkinleştirildi.' : 'Cihaz devre dışı bırakıldı.'); load(); })
@@ -112,7 +128,8 @@ document.getElementById('deleteBtn').addEventListener('click', function(){
     App.apiRequest('DELETE', '/api/devices/' + serial).then(function(){ location.href = '/devices'; }).catch(function(err){ App.toast(err.message, 'danger'); });
   });
 });
-App.meReady.then(load);
+App.meReady.then(function(){ load(); loadQueue(); });
+setInterval(function(){ if (!document.hidden) { loadQueue(); } }, 5000);
 </script>
 </body>
 </html>

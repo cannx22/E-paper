@@ -34,10 +34,11 @@
       <div class="card-body py-2 bg-yellow-lt bulk-bar" id="bulkBar" hidden>
         <div class="d-flex flex-wrap align-items-center gap-2">
           <strong><span id="selCount">0</span> cihaz seçili</strong>
-          <button class="btn btn-sm btn-primary" data-bulk="assign"><i class="ti ti-arrows-exchange me-1"></i>Gateway / Şube Ata</button>
-          <button class="btn btn-sm" data-bulk="disable"><i class="ti ti-player-pause me-1"></i>Devre Dışı</button>
-          <button class="btn btn-sm" data-bulk="enable"><i class="ti ti-player-play me-1"></i>Etkinleştir</button>
-          <button class="btn btn-sm btn-ghost-danger" data-bulk="delete"><i class="ti ti-trash me-1"></i>Sil</button>
+          <button class="btn btn-sm btn-success" data-bulk="send" data-can="label.send"><i class="ti ti-send me-1"></i>Etiket Gönder</button>
+          <button class="btn btn-sm btn-primary" data-bulk="assign" data-can="device.manage"><i class="ti ti-arrows-exchange me-1"></i>Gateway / Şube Ata</button>
+          <button class="btn btn-sm" data-bulk="disable" data-can="device.manage"><i class="ti ti-player-pause me-1"></i>Devre Dışı</button>
+          <button class="btn btn-sm" data-bulk="enable" data-can="device.manage"><i class="ti ti-player-play me-1"></i>Etkinleştir</button>
+          <button class="btn btn-sm btn-ghost-danger" data-bulk="delete" data-can="device.manage"><i class="ti ti-trash me-1"></i>Sil</button>
           <button class="btn btn-sm btn-ghost-secondary ms-auto" data-bulk="clear">Seçimi kaldır</button>
         </div>
       </div>
@@ -154,7 +155,7 @@ var e = App.escapeHtml, $ = function(id){ return document.getElementById(id); };
 var PAGE = 500;
 var devices = [], total = 0, selected = new Set();
 var gateways = [], branches = [], models = [], dealers = [];
-var canManage = false, isCentral = false, isSuper = false;
+var canManage = false, canSelect = false, isCentral = false, isSuper = false;
 
 function gatewaysOf(dealerId){ return gateways.filter(function(g){ return g.dealerId && (!dealerId || String(g.dealerId) === String(dealerId)); }); }
 function branchesOf(dealerId){ return branches.filter(function(b){ return !dealerId || String(b.dealer_id) === String(dealerId); }); }
@@ -174,14 +175,14 @@ function updateCell(d){
 }
 function render(){
   $('countInfo').textContent = devices.length + ' / ' + total + ' cihaz';
-  var cols = canManage ? 9 : 8;
+  var cols = canSelect ? 9 : 8;
   $('devBody').innerHTML = devices.length ? devices.map(function(d){
     var s = e(d.serial);
     var gw = d.gatewayId ? '<a href="/gateways/' + e(d.gatewayId) + '" class="text-reset"><span class="status-dot st ' + (d.gatewayOnline ? 'st-active' : 'st-offline') + '"></span>' + e(d.gatewayName) + '</a>' : '<span class="badge bg-yellow-lt">atanmadı</span>';
     var actions = '<div class="btn-list flex-nowrap"><a class="btn btn-sm btn-icon" href="/?serial=' + s + '" title="Etiket gönder" data-can="label.send"><i class="ti ti-send"></i></a>' +
       (canManage ? '<button class="btn btn-sm btn-icon" data-act="edit" data-serial="' + s + '" title="Düzenle"><i class="ti ti-pencil"></i></button>' : '') + '</div>';
     return '<tr>' +
-      (canManage ? '<td><input class="form-check-input m-0 align-middle" type="checkbox" data-sel="' + s + '"' + (selected.has(d.serial) ? ' checked' : '') + '></td>' : '') +
+      (canSelect ? '<td><input class="form-check-input m-0 align-middle" type="checkbox" data-sel="' + s + '"' + (selected.has(d.serial) ? ' checked' : '') + '></td>' : '') +
       '<td><a href="/devices/' + s + '" class="mono fw-bold">' + s + '</a></td>' +
       '<td>' + e(d.name || '') + (d.notes ? '<div class="small text-secondary text-truncate" style="max-width:220px">' + e(d.notes) + '</div>' : '') + '</td>' +
       '<td class="text-secondary">' + e(d.modelName || '-') + '</td>' +
@@ -241,6 +242,11 @@ $('bulkBar').addEventListener('click', function(ev){
   if (!b) return;
   var act = b.dataset.bulk;
   if (act === 'clear'){ selected.clear(); render(); return; }
+  if (act === 'send'){
+    try { sessionStorage.setItem('epaper-bulk-serials', JSON.stringify(Array.from(selected))); } catch (x) {}
+    location.href = '/?bulk=1';
+    return;
+  }
   if (act === 'assign'){
     var first = devices.filter(function(d){ return selected.has(d.serial); })[0];
     $('assignInfo').textContent = selected.size + ' cihaz seçilen gateway\'e atanacak.';
@@ -406,9 +412,10 @@ $('bulkTemplateBtn').addEventListener('click', function(ev){
 // ---------- Baslangic ----------
 App.meReady.then(function(me){
   canManage = me.can['device.manage'];
+  canSelect = canManage || me.can['label.send'];
   isSuper = me.role === 'super_admin';
   isCentral = me.role === 'super_admin' || me.role === 'support';
-  if (!canManage) document.querySelectorAll('.manage-col').forEach(function(el){ el.hidden = true; });
+  if (!canSelect) document.querySelectorAll('.manage-col').forEach(function(el){ el.hidden = true; });
   if (!isSuper) document.querySelectorAll('.dealer-field').forEach(function(el){ el.hidden = true; });
   if (me.branchId) document.querySelectorAll('.branch-field').forEach(function(el){ el.hidden = true; });
   return Promise.all([

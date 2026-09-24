@@ -135,6 +135,38 @@ Etiket gönderirken hedef seri numarasıdır. Kayıtlı cihazın gateway'i otoma
 Sunucu gateway'e `{type:"send", reqId, serial:"80156767", fields:{...}}` gönderir; seri
 numarasını nRF24 adresine (BCD) çevirme işi gateway ile alıcıda yapılır.
 
+## Güncelleme kuyruğu
+
+Her etiket gönderimi veritabanında kalıcı bir **iş** olarak kaydedilir. Sunucu yeniden başlasa
+da iş kaybolmaz. **Güncellemeler** sayfasında tüm işler ve toplu işler ilerlemeleriyle görünür.
+
+| Durum | Anlamı |
+|---|---|
+| Bekliyor | Sırada ya da gateway çevrimdışı |
+| Gönderiliyor | Gateway'e iletildi |
+| Gateway aldı | Gateway alındığını onayladı (firmware 2.2+) |
+| Başarılı | Cihaz tüm paketleri aldı |
+| Cihaz ulaşılamıyor | nRF'e cevap yok, denemeler bitti |
+| Hata | Diğer hatalar, denemeler bitti |
+| İptal | Kullanıcı iptal etti, daha yeni içerik geldi ya da cihaz devre dışı |
+| Süresi doldu | Belirlenen süre içinde gönderilemedi |
+
+Kurallar:
+
+- **Gateway çevrimdışıysa** iş bekler; gateway bağlanınca kendiliğinden gönderilir.
+- **Başarısız işler** 30 sn, 2 dk, 10 dk aralıklarla tekrar denenir. Deneme sayısı ve bekleme
+  süresi Sistem Ayarları'ndan değiştirilebilir.
+- **Aynı cihaza yeni içerik gönderilirse** henüz gönderilmemiş eski içerik iptal edilir.
+- **Tekli gönderim** öncelikli olarak toplu işlerin önüne geçer. Ekran ilk denemenin sonucunu
+  bekler; gateway çevrimdışıysa "sıraya alındı" bilgisi döner.
+- **Toplu gönderim** iki yolla yapılır:
+  - Cihazlar sayfasında cihazları seçip **Etiket Gönder**: seçilen cihazların hepsine aynı içerik.
+  - Etiket sayfasında **Excel ile Toplu**: her satıra farklı içerik.
+
+  İkisinde de bir "toplu iş" oluşur. Toplu işin ilerlemesi takip edilebilir, bekleyen kısmı
+  iptal edilebilir, başarısız olanlar tek tuşla tekrar denenebilir.
+- **Kayıtlı bir cihazın gateway'i değişirse** bekleyen işleri yeni gateway'e geçer.
+
 ## Yerel geliştirme
 
 ```
@@ -155,7 +187,7 @@ Gateway'in yereldeki sunucuya bağlanması için kurulum sayfasındaki sunucu ad
 | 1 | PostgreSQL, bayi/şube, roller, gateway yaşam döngüsü, QR sahiplenme, telemetri, işlem logu, özet | ✅ |
 | 2 | E-paper cihaz kaydı (8 haneli seri no, barkod/QR, Excel toplu ekleme), ekran modelleri, `serial` protokolü | ✅ |
 | 2.5 | E-posta ile giriş, bayi açılış sihirbazı, kurum/adres bilgileri, lisans limitleri, zorunlu şifre değişimi, hesap kilidi, merkez destek rolü, profil/oturumlar, seri no havuzu, gateway ve cihaz detay sayfaları, cihaz taşıma, yeni arayüz (Tabler, koyu tema) | ✅ |
-| 3 | Kalıcı güncelleme kuyruğu (offline bekletme, tekrar deneme, toplu güncelleme, durum adımları) | |
+| 3 | Kalıcı güncelleme kuyruğu (offline bekletme, tekrar deneme, toplu güncelleme, durum adımları) | ✅ |
 | 4 | Ürün/içerik yönetimi ve cihaz ↔ ürün eşleştirme | |
 | 5 | Şablon motoru, dinamik alanlar, sunucuda bitmap üretimi | |
 | 6 | Tasarım editörü | |

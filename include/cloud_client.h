@@ -6,7 +6,8 @@
 // Gateway NAT/modem arkasinda oldugu icin baglantiyi kendisi acar ve acik
 // tutar: ws(s)://<sunucu>/ws/gateway. Baglaninca "hello" ile kimligini
 // (MAC) ve cihaza ozel gizli anahtarini bildirir; sunucu etiket verisini
-// "send" mesajiyla yollar, gateway nRF24 ile gonderip "result" ile cevaplar.
+// "send" mesajiyla yollar, gateway hemen "ack" ile aldigini bildirir, nRF24
+// ile gonderip sonucu "result" ile cevaplar.
 
 // "send" mesaji geldiginde cagrilir: fields icindeki etiket alanlarini board
 // ("ESA"/"ESB") adresine gonderir, sonucu message'a yazar.

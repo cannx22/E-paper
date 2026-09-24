@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Toplu Güncelleme</title>
+<script src="/static/theme-boot.js"></script>
+<link rel="stylesheet" href="/vendor/tabler/css/tabler.min.css">
+<link rel="stylesheet" href="/vendor/tabler-icons/tabler-icons.min.css">
+<link rel="stylesheet" href="/static/app.css">
+</head>
+<body>
+<div class="page">
+<div id="app-sidebar"></div>
+<div class="page-wrapper">
+  <div class="page-header d-print-none"><div class="container-xl"><div class="row g-2 align-items-center">
+    <div class="col">
+      <div class="page-pretitle"><a href="/updates" class="text-reset"><i class="ti ti-arrow-left me-1"></i>Güncellemeler</a></div>
+      <h2 class="page-title"><i class="ti ti-stack-2 me-2"></i><span id="title">...</span><span class="ms-2" id="stateBadge"></span></h2>
+    </div>
+    <div class="col-auto ms-auto"><div class="btn-list" data-can="label.send">
+      <button class="btn" id="retryBtn" hidden><i class="ti ti-refresh me-1"></i>Başarısızları Tekrar Dene</button>
+      <button class="btn btn-ghost-danger" id="cancelBtn" hidden><i class="ti ti-ban me-1"></i>Bekleyenleri İptal Et</button>
+    </div></div>
+  </div></div></div>
+
+  <div class="page-body"><div class="container-xl">
+    <div class="card mb-3">
+      <div class="card-body">
+        <div class="d-flex flex-wrap justify-content-between align-items-end gap-2 mb-2">
+          <div class="text-secondary small" id="meta"></div>
+          <div class="h2 mb-0" id="percent"></div>
+        </div>
+        <div id="progress"></div>
+        <div class="row g-2 mt-3" id="counts"></div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-header">
+        <ul class="nav nav-tabs card-header-tabs" id="filterTabs">
+          <li class="nav-item"><a href="#" class="nav-link active" data-f="">Tümü</a></li>
+          <li class="nav-item"><a href="#" class="nav-link" data-f="active">Bekleyen</a></li>
+          <li class="nav-item"><a href="#" class="nav-link" data-f="failed">Sorunlu</a></li>
+          <li class="nav-item"><a href="#" class="nav-link" data-f="done">Başarılı</a></li>
+          <li class="nav-item"><a href="#" class="nav-link" data-f="cancelled">İptal</a></li>
+        </ul>
+      </div>
+      <div class="table-responsive">
+        <table class="table table-vcenter card-table">
+          <thead><tr><th>Cihaz</th><th>İçerik</th><th>Gateway</th><th>Durum</th><th>Deneme</th><th>Son işlem</th></tr></thead>
+          <tbody id="jobBody"><tr><td colspan="6" class="text-secondary">Yükleniyor...</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+  </div></div>
+</div></div>
+<script src="/vendor/tabler/js/tabler.min.js"></script>
+<script src="/static/app.js"></script>
+<script>
+var e = App.escapeHtml, $ = function(id){ return document.getElementById(id); };
+var batchId = parseInt(location.pathname.split('/')[2], 10), filter = '', batch = null;
+var SOURCES = {manual: 'Elle', bulk: 'Cihaz seçimi', excel: 'Excel', api: 'API', schedule: 'Zamanlama'};
+function content(f){ return f ? [f.name, f.price ? f.price + ' ' + (f.unit || '') : ''].filter(Boolean).join(' · ') : ''; }
+function cnt(label, v, color){ return '<div class="col-6 col-md"><div class="border rounded p-2 text-center"><div class="h3 m-0 text-' + color + '">' + v + '</div><div class="small text-secondary">' + label + '</div></div></div>'; }
+
+function load(){
+  return App.apiRequest('GET', '/api/updates/batches/' + batchId + (filter ? '?status=' + filter : '')).then(function(b){
+    batch = b;
+    var c = b.counts, pending = c.queued + c.sending, problem = c.unreachable + c.failed;
+    $('title').textContent = b.name;
+    $('stateBadge').innerHTML = b.finished_at ? (problem ? '<span class="badge bg-orange-lt">Tamamlandı (sorunlu)</span>' : '<span class="badge bg-green-lt">Tamamlandı</span>') : '<span class="badge bg-blue-lt">Devam ediyor</span>';
+    $('meta').innerHTML = '#' + b.id + ' · ' + e(SOURCES[b.source] || b.source) + ' · ' + e(b.username || '-') + ' · ' + App.formatDate(b.created_at) +
+      (b.dealer_name ? ' · ' + e(b.dealer_name) : '') + (b.finished_at ? ' · bitiş ' + App.formatDate(b.finished_at) : '');
+    $('percent').textContent = Math.round((c.total - pending) * 100 / (c.total || 1)) + '%';
+    $('progress').innerHTML = App.batchProgress(c, '.9rem');
+    $('counts').innerHTML = cnt('Toplam', c.total, 'reset') + cnt('Başarılı', c.success, 'green') + cnt('Bekleyen', c.queued, 'yellow') + cnt('Gönderiliyor', c.sending, 'blue') +
+      cnt('Ulaşılamıyor', c.unreachable, 'orange') + cnt('Hata', c.failed, 'red') + cnt('İptal', c.cancelled, 'secondary');
+    $('retryBtn').hidden = !problem; $('cancelBtn').hidden = !c.queued;
+    $('jobBody').innerHTML = b.jobs.length ? b.jobs.map(function(j){
+      return '<tr><td><a class="mono fw-bold" href="/devices/' + e(j.serial) + '">' + e(j.serial) + '</a><div class="small text-secondary">' + e(j.deviceName || '') + '</div></td>' +
+        '<td class="small">' + e(content(j.fields)) + '</td>' +
+        '<td class="small">' + (j.gatewayId ? '<span class="status-dot st ' + (j.gatewayOnline ? 'st-active' : 'st-offline') + '"></span>' + e(j.gatewayName || j.gatewayId) : '<span class="text-warning">gateway yok</span>') + '</td>' +
+        '<td>' + App.jobBadge(j.status) + (j.message && j.status !== 'success' ? '<div class="small text-secondary">' + e(j.message.replace(/^HATA:\s*/, '')) + '</div>' : '') + '</td>' +
+        '<td>' + j.attempts + '/' + j.maxAttempts + '</td><td class="small text-secondary">' + App.formatRelative(j.finishedAt || j.startedAt || j.createdAt) + '</td></tr>';
+    }).join('') : App.emptyRow(6, 'Bu filtrede kayıt yok', 'ti-list');
+  }).catch(function(err){ $('title').textContent = 'Toplu iş bulunamadı'; App.toast(err.message, 'danger'); });
+}
+$('filterTabs').addEventListener('click', function(ev){
+  var a = ev.target.closest('[data-f]'); if (!a) return;
+  ev.preventDefault();
+  document.querySelectorAll('#filterTabs .nav-link').forEach(function(x){ x.classList.toggle('active', x === a); });
+  filter = a.dataset.f; load();
+});
+$('retryBtn').addEventListener('click', function(){
+  App.apiRequest('POST', '/api/updates/batches/' + batchId + '/retry', {}).then(function(r){ App.toast(r.requeued + ' güncelleme tekrar kuyruğa alındı.'); load(); }).catch(function(err){ App.toast(err.message, 'danger'); });
+});
+$('cancelBtn').addEventListener('click', function(){
+  App.confirm('Henüz gönderilmemiş güncellemeler iptal edilsin mi? Gönderilmiş olanlar etkilenmez.', {danger: true, okText: 'İptal Et'}).then(function(ok){
+    if (ok) App.apiRequest('POST', '/api/updates/batches/' + batchId + '/cancel', {}).then(function(r){ App.toast(r.cancelled + ' güncelleme iptal edildi.'); load(); }).catch(function(err){ App.toast(err.message, 'danger'); });
+  });
+});
+App.meReady.then(load);
+setInterval(function(){ if (!document.hidden && batch && !batch.finished_at) load(); }, 2500);
+</script>
+</body>
+</html>
