@@ -1,0 +1,126 @@
+/* Etiket tasarim editoru (tam ekran; sol menu yok). */
+.dz-body-page { overflow: hidden; }
+.dz { display: flex; flex-direction: column; height: 100vh; height: 100dvh; }
+
+.dz-top {
+  display: flex; align-items: center; gap: .5rem; padding: .5rem .75rem; min-height: 56px;
+  background: var(--tblr-bg-surface); border-bottom: 1px solid var(--tblr-border-color); flex-wrap: wrap;
+}
+.dz-title { min-width: 140px; max-width: 360px; flex: 0 1 300px; }
+.dz-title .form-control-flush { padding: 0; font-size: 1rem; height: auto; background: transparent; }
+.dz-sep { width: 1px; height: 26px; background: var(--tblr-border-color); margin: 0 .25rem; }
+
+.dz-main { flex: 1; display: flex; min-height: 0; }
+.dz-left, .dz-right {
+  background: var(--tblr-bg-surface); overflow-y: auto; flex-shrink: 0;
+}
+.dz-left { width: 232px; border-right: 1px solid var(--tblr-border-color); padding: .75rem; }
+.dz-right { width: 300px; border-left: 1px solid var(--tblr-border-color); }
+.dz-panel-title { font-size: .72rem; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: var(--tblr-secondary); margin-bottom: .5rem; }
+
+.dz-tools { display: grid; grid-template-columns: 1fr 1fr; gap: .375rem; }
+.dz-tool {
+  display: flex; flex-direction: column; align-items: center; gap: .15rem; padding: .55rem .25rem;
+  border: 1px solid var(--tblr-border-color); border-radius: 10px; background: var(--tblr-bg-surface-secondary);
+  color: var(--tblr-body-color); font-size: .75rem; cursor: pointer; transition: border-color .12s, background .12s; user-select: none;
+}
+.dz-tool .ti { font-size: 1.35rem; }
+.dz-tool:hover { border-color: var(--tblr-primary); background: var(--app-accent-soft); }
+.dz-tool:disabled { opacity: .45; pointer-events: none; }
+
+.dz-layers { display: flex; flex-direction: column; gap: 2px; }
+.dz-layer {
+  display: flex; align-items: center; gap: .4rem; padding: .3rem .4rem; border-radius: 8px; cursor: pointer;
+  font-size: .8rem; border: 1px solid transparent;
+}
+.dz-layer:hover { background: var(--tblr-bg-surface-tertiary); }
+.dz-layer.sel { background: var(--app-accent-soft); border-color: rgba(var(--tblr-primary-rgb), .35); }
+.dz-layer.is-hidden .dz-layer-name { opacity: .45; text-decoration: line-through; }
+.dz-layer.drop-before { box-shadow: 0 -2px 0 var(--tblr-primary); }
+.dz-layer.drop-after { box-shadow: 0 2px 0 var(--tblr-primary); }
+.dz-layer-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dz-layer .ti { font-size: 1rem; color: var(--tblr-secondary); }
+.dz-layer-btn { background: none; border: 0; padding: 0 2px; color: var(--tblr-secondary); cursor: pointer; line-height: 1; opacity: .55; }
+.dz-layer-btn:hover, .dz-layer-btn.on { opacity: 1; color: var(--tblr-body-color); }
+
+.dz-center { flex: 1; position: relative; display: flex; min-width: 0; min-height: 0; }
+.dz-stage {
+  flex: 1; position: relative; overflow: auto; min-width: 0; padding: 32px;
+  background-color: var(--tblr-body-bg);
+  background-image: radial-gradient(rgba(127, 127, 127, .18) 1px, transparent 1px);
+  background-size: 18px 18px;
+  display: flex;
+}
+.dz-canvas-wrap { position: relative; margin: auto; flex-shrink: 0; box-shadow: 0 10px 40px -12px rgba(0, 0, 0, .45), 0 0 0 1px rgba(127, 127, 127, .25); }
+.dz-canvas-wrap canvas { display: block; }
+.dz-canvas-wrap canvas.pixelated { image-rendering: pixelated; image-rendering: crisp-edges; }
+.dz-overlay { position: absolute; inset: 0; cursor: default; touch-action: none; }
+.dz-overlay.drag-over { outline: 2px dashed var(--tblr-primary); outline-offset: 4px; }
+.dz-sel { position: absolute; outline: 1.5px solid #5b6cff; pointer-events: none; }
+.dz-sel.multi { outline-style: dashed; }
+.dz-sel.locked { outline-color: #f59e0b; }
+.dz-hover { position: absolute; outline: 1px solid rgba(91, 108, 255, .55); pointer-events: none; }
+.dz-handle {
+  position: absolute; width: 10px; height: 10px; margin: -5px 0 0 -5px; background: #fff; border: 1.5px solid #5b6cff;
+  border-radius: 3px; pointer-events: auto; box-shadow: 0 1px 3px rgba(0, 0, 0, .3);
+}
+.dz-guide { position: absolute; background: #ec4899; pointer-events: none; }
+.dz-guide.v { width: 1px; top: 0; bottom: 0; }
+.dz-guide.h { height: 1px; left: 0; right: 0; }
+.dz-band { position: absolute; border: 1px solid #5b6cff; background: rgba(91, 108, 255, .1); pointer-events: none; }
+.dz-size-tip {
+  position: absolute; transform: translate(-50%, 8px); background: #5b6cff; color: #fff; font-size: 11px; padding: 1px 6px;
+  border-radius: 5px; white-space: nowrap; pointer-events: none; font-family: var(--tblr-font-monospace);
+}
+.dz-hint {
+  position: absolute; left: .75rem; bottom: .6rem; font-size: .75rem; color: var(--tblr-secondary);
+  background: var(--tblr-bg-surface); border: 1px solid var(--tblr-border-color); border-radius: 8px; padding: .2rem .55rem; pointer-events: none;
+}
+
+.dz-tabs { position: sticky; top: 0; z-index: 2; background: var(--tblr-bg-surface); }
+.dz-section { padding: .75rem .9rem; border-bottom: 1px solid var(--tblr-border-color); }
+.dz-section:last-child { border-bottom: 0; }
+.dz-section .form-label { font-size: .75rem; margin-bottom: .2rem; color: var(--tblr-secondary); font-weight: 600; }
+.dz-section .form-control, .dz-section .form-select { font-size: .82rem; padding-top: .3rem; padding-bottom: .3rem; }
+.dz-grid4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: .35rem; }
+.dz-grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: .35rem; }
+.dz-num { position: relative; }
+.dz-num span { position: absolute; left: 7px; top: 50%; transform: translateY(-50%); font-size: .68rem; color: var(--tblr-secondary); pointer-events: none; }
+.dz-num input { padding-left: 1.3rem !important; }
+.dz-swatches { display: flex; gap: .35rem; flex-wrap: wrap; }
+.dz-swatch {
+  width: 28px; height: 28px; border-radius: 8px; border: 1px solid var(--tblr-border-color); cursor: pointer; position: relative;
+}
+.dz-swatch.on { box-shadow: 0 0 0 2px var(--tblr-bg-surface), 0 0 0 4px #5b6cff; }
+.dz-swatch.none { background: repeating-linear-gradient(45deg, transparent 0 5px, rgba(239, 68, 68, .6) 5px 7px), var(--tblr-bg-surface); }
+.dz-seg { display: flex; }
+.dz-seg .btn { flex: 1; padding: .3rem .2rem; }
+.dz-seg .btn.on { background: var(--app-accent-soft); border-color: rgba(var(--tblr-primary-rgb), .5); color: var(--tblr-primary); }
+.dz-kbd { font-size: .72rem; }
+.dz-readonly { font-size: .85rem; }
+
+/* Tasarim kutuphanesi kartlari */
+.design-card { overflow: hidden; transition: box-shadow .15s, transform .15s; }
+.design-card:hover { box-shadow: var(--app-shadow-hover); transform: translateY(-2px); }
+.design-thumb {
+  display: flex; align-items: center; justify-content: center; background: #fff; border-bottom: 1px solid var(--tblr-border-color);
+  max-height: 220px; overflow: hidden;
+}
+.design-thumb img { width: 100%; height: 100%; object-fit: contain; image-rendering: pixelated; }
+.line-clamp-2 { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+
+@media (max-width: 991.98px) {
+  .dz-left { width: 180px; }
+  .dz-right { width: 260px; }
+}
+@media (max-width: 767.98px) {
+  .dz-body-page { overflow: auto; }
+  .dz { height: auto; min-height: 100vh; }
+  .dz-main { flex-direction: column; }
+  .dz-left, .dz-right { width: auto; border: 0; border-bottom: 1px solid var(--tblr-border-color); max-height: none; }
+  .dz-tools { grid-template-columns: repeat(4, 1fr); }
+  .dz-layers { max-height: 180px; overflow-y: auto; }
+  .dz-center { min-height: 55vh; order: -1; }
+  .dz-stage { padding: 16px; }
+  .dz-hint { display: none; }
+}

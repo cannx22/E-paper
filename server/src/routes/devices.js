@@ -154,7 +154,58 @@ async function resolveModelId(v) {
 }
 
 api.get('/screen-models', requireView, async (req, res) => {
-  res.json(await db.many('SELECT id, code, name, diagonal_in, width_px, height_px, colors FROM screen_models WHERE active ORDER BY diagonal_in, name'));
+  const all = req.query.all === '1' && req.user.role === 'super_admin';
+  res.json(await db.many(
+    `SELECT m.id, m.code, m.name, m.diagonal_in, m.width_px, m.height_px, m.colors, m.active,
+            (SELECT count(*)::int FROM devices dv WHERE dv.model_id = m.id) AS device_count,
+            (SELECT count(*)::int FROM designs ds WHERE ds.screen_model_id = m.id AND NOT ds.archived) AS design_count
+       FROM screen_models m ${all ? '' : 'WHERE m.active'} ORDER BY m.diagonal_in, m.colors, m.name`,
+  ));
+});
+
+// Ekran modeli yonetimi (merkez): yeni panel boyutlari eklenebilir.
+function modelBody(b, current = {}) {
+  const code = String(b.code ?? current.code ?? '').trim().toUpperCase().replace(/[^A-Z0-9-]/g, '').slice(0, 30);
+  const name = String(b.name ?? current.name ?? '').trim().slice(0, 80);
+  const width = parseInt(b.width_px ?? current.width_px, 10);
+  const height = parseInt(b.height_px ?? current.height_px, 10);
+  const diag = b.diagonal_in === '' || b.diagonal_in == null ? (current.diagonal_in ?? null) : Number(b.diagonal_in);
+  const colors = b.colors ?? current.colors ?? 'bw';
+  if (!code) fail(400, 'Model kodu gerekli (örnek EPD29-BW).');
+  if (!name) fail(400, 'Model adı gerekli.');
+  if (!(width >= 16 && width <= 2000 && height >= 16 && height <= 2000)) fail(400, 'Çözünürlük 16-2000 piksel arası olmalı.');
+  if (!['bw', 'bwr', 'bwy', 'color'].includes(colors)) fail(400, 'Renk tipi geçersiz.');
+  if (diag !== null && !(diag > 0 && diag < 100)) fail(400, 'Ekran boyutu (inç) geçersiz.');
+  return { code, name, width, height, diag, colors, active: b.active !== undefined ? !!b.active : (current.active ?? true) };
+}
+api.post('/screen-models', auth.requireApi('settings.manage'), async (req, res) => {
+  const m = modelBody(req.body || {});
+  try {
+    const row = await db.one('INSERT INTO screen_models (code, name, diagonal_in, width_px, height_px, colors) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *', [m.code, m.name, m.diag, m.width, m.height, m.colors]);
+    await audit.log(req.user, 'screen_model.created', { entityType: 'screen_model', entityId: row.id, dealerId: null, branchId: null, message: `${m.name} ${m.width}x${m.height}` });
+    res.json(row);
+  } catch (err) {
+    if (err.code === '23505') fail(400, 'Bu model kodu zaten var.');
+    throw err;
+  }
+});
+api.post('/screen-models/:id', auth.requireApi('settings.manage'), async (req, res) => {
+  const cur = await db.one('SELECT * FROM screen_models WHERE id = $1', [parseInt(req.params.id, 10) || 0]);
+  if (!cur) fail(404, 'Ekran modeli bulunamadı.');
+  const m = modelBody(req.body || {}, cur);
+  const used = (await db.one('SELECT (SELECT count(*) FROM designs WHERE screen_model_id = $1 AND NOT archived) + (SELECT count(*) FROM devices WHERE model_id = $1) AS n', [cur.id])).n;
+  if (used > 0 && (m.width !== cur.width_px || m.height !== cur.height_px || m.colors !== cur.colors)) {
+    fail(400, 'Bu model tasarım veya cihazlarda kullanılıyor; çözünürlüğü ve renk tipi değiştirilemez. Yeni bir model ekleyin.');
+  }
+  try {
+    const row = await db.one('UPDATE screen_models SET code = $2, name = $3, diagonal_in = $4, width_px = $5, height_px = $6, colors = $7, active = $8 WHERE id = $1 RETURNING *',
+      [cur.id, m.code, m.name, m.diag, m.width, m.height, m.colors, m.active]);
+    await audit.log(req.user, 'screen_model.updated', { entityType: 'screen_model', entityId: cur.id, dealerId: null, branchId: null, message: m.name });
+    res.json(row);
+  } catch (err) {
+    if (err.code === '23505') fail(400, 'Bu model kodu zaten var.');
+    throw err;
+  }
 });
 
 // ?gatewayId= ?branchId= ?q= (seri no / isim) ?limit= ?offset=

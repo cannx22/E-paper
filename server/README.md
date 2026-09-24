@@ -167,6 +167,38 @@ Kurallar:
   iptal edilebilir, başarısız olanlar tek tuşla tekrar denenebilir.
 - **Kayıtlı bir cihazın gateway'i değişirse** bekleyen işleri yeni gateway'e geçer.
 
+## Etiket tasarımları
+
+**Tasarımlar** sayfası tasarım kütüphanesidir. Merkezin hazır şablonları tüm bayilere görünür.
+Bayi tasarımlarını yalnızca o bayi görür.
+
+- **Yeni Tasarım:** Önce ekran modeli seçilir (tuval, panelin çözünürlüğündedir). Tasarım boş
+  tuvalle ya da var olan bir tasarımdan başlatılabilir.
+- **Editör:** Elemanlar araç çubuğundan tıklanarak eklenir ya da tuvale sürüklenir. Eleman
+  türleri: metin, dinamik alan, kutu, elips, çizgi, görsel/logo, barkod (EAN-13 / Code 128)
+  ve QR.
+  - Elemanlar sürükleyerek taşınır, tutamaçlardan boyutlandırılır.
+  - Tuval kenarlarına ve diğer elemanlara hizalama çizgileri çıkar.
+  - Katmanlar sürükleyerek sıralanır; katman gizlenebilir ve kilitlenebilir.
+  - Geri al / yinele, kopyala / yapıştır (tasarımlar arası da çalışır) ve klavye
+    kısayolları vardır.
+- **Dinamik alanlar:** `{{urun_adi}}`, `{{fiyat}}`, `{{barkod}}` vb. alanlar etiket
+  gönderilirken gerçek verilerle dolar. Uzun metinler kutuya sığana kadar otomatik küçülür.
+  **Örnek Veri** sekmesinden önizleme değerleri değiştirilebilir.
+- **E-paper görünümü:** Tasarım, panelin gerçek renklerine (siyah/beyaz, BWR ise kırmızı)
+  indirgenmiş olarak gösterilir. Tarayıcı ve sunucu aynı çizim kodunu
+  (`public/static/design-render.js`) ve aynı fontları kullanır. Bu yüzden editörde görülen,
+  etikete gidenle birebir aynıdır.
+- **Kopyala / başka boyuta:** Bir tasarım başka bir ekran modeline kopyalanınca elemanlar yeni
+  boyuta ölçeklenir. Hazır şablonlar bu şekilde kopyalanarak düzenlenir.
+- **Sürüm geçmişi:** Her kayıtta önceki hal saklanır (son 50 sürüm) ve geri yüklenebilir.
+- **Ekran modelleri:** Merkez, **Sistem Ayarları → Ekran Modelleri** bölümünden yeni panel
+  boyutu ekleyebilir. Kullanımdaki bir modelin çözünürlüğü değiştirilemez.
+
+Tasarımın etikete resim olarak gönderilmesi 2. aşamadır. Bu aşama gateway ve alıcı
+firmware'inde resim modu gerektirir. Sunucu tarafında panel bit düzlemleri
+(`render.renderPlanes`) hazırdır.
+
 ## Yerel geliştirme
 
 ```
@@ -189,8 +221,8 @@ Gateway'in yereldeki sunucuya bağlanması için kurulum sayfasındaki sunucu ad
 | 2.5 | E-posta ile giriş, bayi açılış sihirbazı, kurum/adres bilgileri, lisans limitleri, zorunlu şifre değişimi, hesap kilidi, merkez destek rolü, profil/oturumlar, seri no havuzu, gateway ve cihaz detay sayfaları, cihaz taşıma, yeni arayüz (Tabler, koyu tema) | ✅ |
 | 3 | Kalıcı güncelleme kuyruğu (offline bekletme, tekrar deneme, toplu güncelleme, durum adımları) | ✅ |
 | 4 | Ürün/içerik yönetimi ve cihaz ↔ ürün eşleştirme | |
-| 5 | Şablon motoru, dinamik alanlar, sunucuda bitmap üretimi | |
-| 6 | Tasarım editörü | |
+| 5 | Tasarım editörü (tüm ekran boyutları), tasarım kütüphanesi, sürüm geçmişi, dinamik alanlar, sunucuda PNG/bitmap çizimi | ✅ 1. aşama |
+| 6 | Tasarımı etikete resim olarak gönderme (gateway + alıcı resim modu) | |
 | 7 | Zamanlama | |
 | 8 | Dış API, ERP entegrasyonu, stok uyarıları | |
 | 9 | Gelişmiş dashboard, gateway OTA güncelleme | |

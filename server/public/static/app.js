@@ -102,6 +102,8 @@
     'device.bulk_assign': 'Toplu cihaz atama', 'device.bulk_disable': 'Toplu devre dışı', 'device.bulk_enable': 'Toplu etkinleştirme', 'device.bulk_delete': 'Toplu cihaz silme',
     'inventory.imported': 'Havuza seri no eklendi', 'inventory.allocated': 'Seri no tahsis edildi', 'inventory.unallocated': 'Seri no tahsisi kaldırıldı', 'inventory.deleted': 'Havuzdan seri no silindi',
     'settings.updated': 'Ayarlar güncellendi',
+    'design.created': 'Tasarım oluşturuldu', 'design.updated': 'Tasarım kaydedildi', 'design.deleted': 'Tasarım silindi', 'design.restored': 'Tasarım sürümü geri yüklendi',
+    'screen_model.created': 'Ekran modeli eklendi', 'screen_model.updated': 'Ekran modeli güncellendi',
     'update.batch_cancelled': 'Toplu iş iptal edildi', 'update.batch_retried': 'Toplu iş tekrar denendi', 'update.job_cancelled': 'Güncelleme iptal edildi'
   };
   var JOB_STATUS = {
@@ -269,6 +271,7 @@
       c['audit.view'] && { href: '/updates', icon: 'ti-list-check', text: 'Güncellemeler', match: /^\/updates/ },
       { href: '/devices', icon: 'ti-tags', text: 'Cihazlar', match: /^\/devices/ },
       { href: '/gateways', icon: 'ti-router', text: 'Gateway\'ler', match: /^\/gateways/ },
+      c['design.view'] && { href: '/designs', icon: 'ti-palette', text: 'Tasarımlar', match: /^\/designs/ },
       { section: 'Yönetim' },
       c['dealer.view'] && { href: '/dealers', icon: 'ti-building-store', text: 'Bayiler', match: /^\/dealers/ },
       !c['dealer.view'] && me.dealerId && c['branch.view'] && { href: '/dealers/' + me.dealerId, icon: 'ti-building-store', text: 'Bayi Bilgilerim', match: /^\/dealers/ },

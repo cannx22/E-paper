@@ -44,6 +44,8 @@ const ACTIONS = {
   'device.view':       ALL,
   'device.manage':     MANAGERS,                                         // ekleme, toplu ekleme, atama, silme
   'inventory.manage':  ['super_admin'],                                  // seri no havuzu
+  'design.view':       ALL,
+  'design.manage':     MANAGERS,                                         // bayi tasarimlari (merkez kutuphanesi: sadece merkezi yonetici)
   'dealer.view':       ['super_admin', 'support'],
   'dealer.manage':     ['super_admin'],
   'branch.view':       ['super_admin', 'support', 'dealer_admin'],

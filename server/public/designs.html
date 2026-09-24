@@ -1,0 +1,162 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tasarımlar</title>
+<script src="/static/theme-boot.js"></script>
+<link rel="stylesheet" href="/vendor/tabler/css/tabler.min.css">
+<link rel="stylesheet" href="/vendor/tabler-icons/tabler-icons.min.css">
+<link rel="stylesheet" href="/static/app.css">
+<link rel="stylesheet" href="/static/designer.css">
+</head>
+<body>
+<div class="page">
+<div id="app-sidebar"></div>
+<div class="page-wrapper">
+  <div class="page-header d-print-none"><div class="container-xl"><div class="row g-2 align-items-center">
+    <div class="col"><div class="page-pretitle">Sürükle-bırak etiket editörü</div><h2 class="page-title"><i class="ti ti-palette me-2"></i>Tasarımlar</h2></div>
+    <div class="col-auto ms-auto"><div class="btn-list">
+      <button class="btn btn-primary" id="newBtn" data-can="design.manage"><i class="ti ti-plus me-1"></i>Yeni Tasarım</button>
+    </div></div>
+  </div></div></div>
+
+  <div class="page-body"><div class="container-xl">
+    <div class="card mb-3"><div class="card-body py-3">
+      <div class="row g-2">
+        <div class="col-md-4"><div class="input-icon"><span class="input-icon-addon"><i class="ti ti-search"></i></span><input class="form-control" id="fQ" placeholder="Tasarım ara..."></div></div>
+        <div class="col-md-3"><select class="form-select" id="fModel"></select></div>
+        <div class="col-md-2"><select class="form-select" id="fCategory">
+          <option value="">Tüm kategoriler</option><option value="market">Market</option><option value="otel">Otel</option><option value="restoran">Restoran</option><option value="genel">Genel</option></select></div>
+        <div class="col-md-3"><select class="form-select" id="fScope">
+          <option value="">Tüm tasarımlar</option><option value="global">Hazır şablonlar (merkez)</option><option value="dealer">Bayi tasarımları</option></select></div>
+      </div>
+    </div></div>
+
+    <div class="row row-cards" id="grid"></div>
+    <div class="text-secondary small mt-3"><i class="ti ti-info-circle me-1"></i>Hazır şablonlar merkez kütüphanesidir; kopyalayarak kendi tasarımınıza dönüştürebilirsiniz. Bir tasarımı başka bir ekran boyutuna kopyaladığınızda elemanlar yeni boyuta göre ölçeklenir.</div>
+  </div></div>
+</div></div>
+<script src="/vendor/tabler/js/tabler.min.js"></script>
+<script src="/static/app.js"></script>
+<script>
+var e = App.escapeHtml, $ = function(id){ return document.getElementById(id); };
+var models = [], dealers = [], list = [];
+var CATS = {market: 'Market', otel: 'Otel', restoran: 'Restoran', genel: 'Genel'};
+var COLORS = {bw: 'Siyah-Beyaz', bwr: 'Siyah-Beyaz-Kırmızı', bwy: 'Siyah-Beyaz-Sarı', color: 'Renkli'};
+
+function modelLabel(m){ return m.name + ' · ' + m.width_px + '×' + m.height_px + (m.colors !== 'bw' ? ' · ' + (COLORS[m.colors] || m.colors) : ''); }
+function thumbSrc(d){ return d.thumbnail || '/api/designs/' + d.id + '/render.png?scale=2&v=' + d.version; }
+
+function card(d){
+  var scope = d.scope === 'global' ? '<span class="badge bg-purple-lt"><i class="ti ti-star me-1"></i>Hazır şablon</span>' : '<span class="badge bg-blue-lt">' + e(d.dealerName || 'Bayi') + '</span>';
+  var colorDot = d.colors === 'bwr' ? '<span class="badge bg-red-lt">+Kırmızı</span>' : d.colors === 'bwy' ? '<span class="badge bg-yellow-lt">+Sarı</span>' : '';
+  var manage = currentUser.can['design.manage'];
+  return '<div class="col-sm-6 col-lg-4 col-xl-3"><div class="card design-card h-100">' +
+    '<a class="design-thumb" href="/designs/' + d.id + '/edit" style="aspect-ratio:' + d.width + '/' + d.height + '"><img loading="lazy" alt="" src="' + e(thumbSrc(d)) + '"></a>' +
+    '<div class="card-body p-3">' +
+      '<div class="d-flex align-items-start gap-2"><div class="min-w-0 flex-fill"><div class="fw-bold text-truncate" title="' + e(d.name) + '">' + e(d.name) + '</div>' +
+      '<div class="small text-secondary text-truncate">' + e(d.modelName) + ' · ' + d.width + '×' + d.height + '</div></div>' +
+      '<div class="dropdown"><a href="#" class="btn btn-icon btn-sm btn-ghost-secondary" data-bs-toggle="dropdown"><i class="ti ti-dots-vertical"></i></a><div class="dropdown-menu dropdown-menu-end">' +
+        '<a class="dropdown-item" href="/designs/' + d.id + '/edit"><i class="ti ' + (d.editable ? 'ti-pencil' : 'ti-eye') + ' me-2"></i>' + (d.editable ? 'Düzenle' : 'Görüntüle') + '</a>' +
+        (manage ? '<a class="dropdown-item" href="#" data-dup="' + d.id + '"><i class="ti ti-copy me-2"></i>Kopyala / başka boyuta</a>' : '') +
+        '<a class="dropdown-item" href="/api/designs/' + d.id + '/render.png?scale=3" download="' + e(d.name) + '.png"><i class="ti ti-download me-2"></i>PNG indir</a>' +
+        (d.editable ? '<div class="dropdown-divider"></div><a class="dropdown-item text-danger" href="#" data-del="' + d.id + '"><i class="ti ti-trash me-2"></i>Sil</a>' : '') +
+      '</div></div></div>' +
+      '<div class="d-flex flex-wrap gap-1 mt-2">' + scope + '<span class="badge bg-secondary-lt">' + e(CATS[d.category] || d.category) + '</span>' + colorDot + '</div>' +
+      (d.description ? '<div class="small text-secondary mt-2 line-clamp-2">' + e(d.description) + '</div>' : '') +
+    '</div>' +
+    '<div class="card-footer py-2 small text-secondary d-flex justify-content-between"><span>v' + d.version + ' · ' + d.elementCount + ' eleman</span><span>' + App.formatRelative(d.updatedAt) + '</span></div>' +
+  '</div></div>';
+}
+
+function load(){
+  var p = [];
+  if ($('fModel').value) p.push('modelId=' + $('fModel').value);
+  if ($('fCategory').value) p.push('category=' + $('fCategory').value);
+  if ($('fScope').value) p.push('scope=' + $('fScope').value);
+  if ($('fQ').value.trim()) p.push('q=' + encodeURIComponent($('fQ').value.trim()));
+  return App.apiRequest('GET', '/api/designs?' + p.join('&')).then(function(rows){
+    list = rows;
+    $('grid').innerHTML = rows.length ? rows.map(card).join('') :
+      '<div class="col-12"><div class="card"><div class="empty py-5"><div class="empty-icon"><i class="ti ti-palette fs-1"></i></div><p class="empty-title">Tasarım bulunamadı</p>' +
+      '<p class="empty-subtitle text-secondary">Filtreleri değiştirin veya yeni bir tasarım oluşturun.</p></div></div></div>';
+  });
+}
+
+function modelOptions(selected){
+  return models.map(function(m){ return '<option value="' + m.id + '"' + (String(m.id) === String(selected) ? ' selected' : '') + '>' + e(modelLabel(m)) + '</option>'; }).join('');
+}
+function dealerField(){
+  if (currentUser.role !== 'super_admin') return '';
+  return '<div class="mb-3"><label class="form-label">Kime ait</label><select class="form-select" name="dealerId"><option value="">Merkez kütüphanesi (tüm bayiler görür)</option>' +
+    dealers.map(function(d){ return '<option value="' + d.id + '">' + e(d.name) + '</option>'; }).join('') + '</select></div>';
+}
+
+function newDesign(){
+  var templates = list.length ? list : [];
+  App.dialog({
+    title: 'Yeni Tasarım', okText: 'Oluştur ve Düzenle',
+    html: '<div class="mb-3"><label class="form-label required">Tasarım adı</label><input class="form-control" name="name" maxlength="120" required placeholder="Örn. Manav fiyat etiketi"></div>' +
+      '<div class="row g-2 mb-3"><div class="col-sm-7"><label class="form-label required">Ekran modeli</label><select class="form-select" name="screenModelId">' + modelOptions($('fModel').value) + '</select></div>' +
+      '<div class="col-sm-5"><label class="form-label">Kategori</label><select class="form-select" name="category"><option value="market">Market</option><option value="otel">Otel</option><option value="restoran">Restoran</option><option value="genel">Genel</option></select></div></div>' +
+      '<div class="mb-3"><label class="form-label">Başlangıç</label><select class="form-select" name="fromDesignId"><option value="">Boş tuval</option>' +
+        templates.map(function(d){ return '<option value="' + d.id + '">' + e(d.name) + ' (' + e(d.modelName) + ')</option>'; }).join('') + '</select>' +
+        '<div class="form-hint">Farklı boyuttaki bir tasarımı seçerseniz seçtiğiniz ekrana göre ölçeklenir.</div></div>' +
+      dealerField() +
+      '<div><label class="form-label">Açıklama</label><input class="form-control" name="description" maxlength="500"></div>',
+    onOk: function(body){
+      var b = {};
+      body.querySelectorAll('[name]').forEach(function(el){ b[el.name] = el.value; });
+      if (!b.fromDesignId) delete b.fromDesignId;
+      return App.apiRequest('POST', '/api/designs', b).then(function(r){ return r; }).catch(function(err){ App.toast(err.message, 'danger'); return false; });
+    }
+  }).then(function(r){ if (r && r.id) location.href = '/designs/' + r.id + '/edit'; });
+}
+
+function duplicate(id){
+  var d = list.find(function(x){ return String(x.id) === String(id); });
+  App.dialog({
+    title: 'Tasarımı Kopyala', okText: 'Kopyala',
+    html: '<div class="mb-3"><label class="form-label required">Yeni ad</label><input class="form-control" name="name" maxlength="120" required value="' + e(d.name + ' (kopya)') + '"></div>' +
+      '<div class="mb-3"><label class="form-label">Ekran modeli</label><select class="form-select" name="screenModelId">' + modelOptions(d.screenModelId) + '</select>' +
+      '<div class="form-hint">Farklı bir boyut seçerseniz tasarım otomatik ölçeklenir; sonra editörde ince ayar yapabilirsiniz.</div></div>' + dealerField(),
+    onOk: function(body){
+      var b = {};
+      body.querySelectorAll('[name]').forEach(function(el){ b[el.name] = el.value; });
+      return App.apiRequest('POST', '/api/designs/' + id + '/duplicate', b).catch(function(err){ App.toast(err.message, 'danger'); return false; });
+    }
+  }).then(function(r){
+    if (!r || !r.id) return;
+    App.toast(r.scaled ? 'Kopyalandı ve yeni boyuta ölçeklendi. Editörde kontrol edin.' : 'Tasarım kopyalandı.');
+    if (r.scaled) location.href = '/designs/' + r.id + '/edit'; else load();
+  });
+}
+
+$('grid').addEventListener('click', function(ev){
+  var dup = ev.target.closest('[data-dup]'), del = ev.target.closest('[data-del]');
+  if (dup){ ev.preventDefault(); duplicate(dup.dataset.dup); }
+  if (del){
+    ev.preventDefault();
+    var d = list.find(function(x){ return String(x.id) === del.dataset.del; });
+    App.confirm('"' + d.name + '" tasarımı silinsin mi?', {danger: true, okText: 'Sil'}).then(function(ok){
+      if (!ok) return;
+      App.apiRequest('DELETE', '/api/designs/' + d.id).then(function(){ App.toast('Tasarım silindi.'); load(); }).catch(function(err){ App.toast(err.message, 'danger'); });
+    });
+  }
+});
+$('newBtn').addEventListener('click', newDesign);
+['fModel', 'fCategory', 'fScope'].forEach(function(id){ $(id).addEventListener('change', load); });
+var qTimer;
+$('fQ').addEventListener('input', function(){ clearTimeout(qTimer); qTimer = setTimeout(load, 250); });
+
+App.meReady.then(function(me){
+  var reqs = [App.apiRequest('GET', '/api/screen-models').then(function(m){ models = m; })];
+  if (me.role === 'super_admin') reqs.push(App.apiRequest('GET', '/api/dealers').then(function(d){ dealers = d; }).catch(function(){}));
+  return Promise.all(reqs);
+}).then(function(){
+  $('fModel').innerHTML = '<option value="">Tüm ekran modelleri</option>' + modelOptions(App.qs('modelId'));
+  load();
+});
+</script>
+</body>
+</html>

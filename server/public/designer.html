@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tasarım Editörü</title>
+<script src="/static/theme-boot.js"></script>
+<link rel="stylesheet" href="/vendor/tabler/css/tabler.min.css">
+<link rel="stylesheet" href="/vendor/tabler-icons/tabler-icons.min.css">
+<link rel="stylesheet" href="/static/app.css">
+<link rel="stylesheet" href="/static/designer.css">
+<style>
+@font-face { font-family: "Inter"; font-weight: 400; src: url(/fonts/inter-400.ttf) format("truetype"); }
+@font-face { font-family: "Inter"; font-weight: 700; src: url(/fonts/inter-700.ttf) format("truetype"); }
+@font-face { font-family: "Roboto Condensed"; font-weight: 400; src: url(/fonts/roboto-condensed-400.ttf) format("truetype"); }
+@font-face { font-family: "Roboto Condensed"; font-weight: 700; src: url(/fonts/roboto-condensed-700.ttf) format("truetype"); }
+@font-face { font-family: "Oswald"; font-weight: 400; src: url(/fonts/oswald-400.ttf) format("truetype"); }
+@font-face { font-family: "Oswald"; font-weight: 700; src: url(/fonts/oswald-700.ttf) format("truetype"); }
+@font-face { font-family: "Roboto Mono"; font-weight: 400; src: url(/fonts/roboto-mono-400.ttf) format("truetype"); }
+@font-face { font-family: "Roboto Mono"; font-weight: 700; src: url(/fonts/roboto-mono-700.ttf) format("truetype"); }
+</style>
+</head>
+<body class="dz-body-page">
+<div class="dz">
+  <header class="dz-top">
+    <a href="/designs" class="btn btn-icon btn-ghost-secondary" id="backBtn" title="Tasarımlara dön"><i class="ti ti-arrow-left"></i></a>
+    <div class="dz-title">
+      <input class="form-control form-control-flush fw-bold" id="dName" maxlength="120" placeholder="Tasarım adı">
+      <div class="small text-secondary text-truncate" id="dMeta">Yükleniyor...</div>
+    </div>
+    <div class="dz-sep d-none d-md-block"></div>
+    <div class="btn-group d-none d-md-inline-flex">
+      <button class="btn btn-icon" id="undoBtn" title="Geri al (Ctrl+Z)"><i class="ti ti-arrow-back-up"></i></button>
+      <button class="btn btn-icon" id="redoBtn" title="Yinele (Ctrl+Y)"><i class="ti ti-arrow-forward-up"></i></button>
+    </div>
+    <div class="btn-group">
+      <button class="btn btn-icon" id="zoomOut" title="Uzaklaş"><i class="ti ti-minus"></i></button>
+      <button class="btn px-2 mono" id="zoomFit" title="Ekrana sığdır" style="min-width:64px">100%</button>
+      <button class="btn btn-icon" id="zoomIn" title="Yakınlaş"><i class="ti ti-plus"></i></button>
+    </div>
+    <label class="form-check form-switch mb-0 ms-1 d-none d-lg-flex align-items-center gap-1" title="Panelin gerçek görünümü: sadece panel renkleri, ara ton yok">
+      <input class="form-check-input" type="checkbox" id="epaperView" checked><span class="form-check-label small">E-paper görünümü</span>
+    </label>
+    <div class="ms-auto d-flex gap-2 align-items-center">
+      <span class="badge bg-yellow-lt d-none" id="dirtyBadge">Kaydedilmedi</span>
+      <div class="dropdown">
+        <button class="btn" data-bs-toggle="dropdown"><i class="ti ti-dots me-1"></i><span class="d-none d-sm-inline">Diğer</span></button>
+        <div class="dropdown-menu dropdown-menu-end">
+          <a class="dropdown-item" href="#" id="pngBtn"><i class="ti ti-download me-2"></i>PNG indir (örnek veriyle)</a>
+          <a class="dropdown-item" href="#" id="historyBtn"><i class="ti ti-history me-2"></i>Sürüm geçmişi</a>
+          <a class="dropdown-item" href="#" id="copyBtn"><i class="ti ti-copy me-2"></i>Kopyasını oluştur</a>
+          <div class="dropdown-divider"></div>
+          <a class="dropdown-item" href="#" id="shortcutsBtn"><i class="ti ti-keyboard me-2"></i>Klavye kısayolları</a>
+        </div>
+      </div>
+      <button class="btn btn-primary" id="saveBtn"><i class="ti ti-device-floppy me-1"></i>Kaydet</button>
+    </div>
+  </header>
+
+  <div class="alert alert-info dz-readonly m-0 rounded-0 py-2" id="readonlyBar" hidden>
+    <i class="ti ti-lock me-1"></i><span id="readonlyText">Bu tasarımı düzenleme yetkiniz yok.</span>
+    <a href="#" class="ms-2 fw-bold" id="readonlyCopy">Kopyasını oluşturup düzenle</a>
+  </div>
+
+  <div class="dz-main">
+    <aside class="dz-left">
+      <div class="dz-panel-title">Ekle <span class="text-secondary fw-normal">· tıklayın veya sürükleyin</span></div>
+      <div class="dz-tools" id="tools">
+        <button class="dz-tool" draggable="true" data-add="text"><i class="ti ti-typography"></i><span>Metin</span></button>
+        <div class="dropdown">
+          <button class="dz-tool w-100" data-bs-toggle="dropdown" data-bs-auto-close="true"><i class="ti ti-braces"></i><span>Dinamik Alan</span></button>
+          <div class="dropdown-menu" id="fieldMenu"></div>
+        </div>
+        <button class="dz-tool" draggable="true" data-add="rect"><i class="ti ti-square"></i><span>Kutu</span></button>
+        <button class="dz-tool" draggable="true" data-add="ellipse"><i class="ti ti-circle"></i><span>Elips</span></button>
+        <button class="dz-tool" draggable="true" data-add="line"><i class="ti ti-line"></i><span>Çizgi</span></button>
+        <button class="dz-tool" data-add="image"><i class="ti ti-photo"></i><span>Görsel / Logo</span></button>
+        <button class="dz-tool" draggable="true" data-add="barcode"><i class="ti ti-barcode"></i><span>Barkod</span></button>
+        <button class="dz-tool" draggable="true" data-add="qr"><i class="ti ti-qrcode"></i><span>QR Kod</span></button>
+      </div>
+      <input type="file" id="imageFile" accept="image/png,image/jpeg,image/gif,image/webp" hidden>
+      <div class="dz-panel-title mt-3 d-flex align-items-center">Katmanlar <span class="ms-auto text-secondary fw-normal" id="layerCount"></span></div>
+      <div class="dz-layers" id="layers"></div>
+    </aside>
+
+    <main class="dz-center">
+      <div class="dz-stage" id="stage">
+        <div class="dz-canvas-wrap" id="wrap">
+          <canvas id="cv"></canvas>
+          <div class="dz-overlay" id="overlay"></div>
+        </div>
+      </div>
+      <div class="dz-hint" id="hint"><i class="ti ti-pointer me-1"></i>Sürükleyerek taşıyın · Shift: çoklu seçim · Alt: yakalamayı kapat · Ctrl+tekerlek: yakınlaş</div>
+    </main>
+
+    <aside class="dz-right">
+      <ul class="nav nav-tabs nav-fill dz-tabs">
+        <li class="nav-item"><a href="#pProps" class="nav-link active" data-bs-toggle="tab"><i class="ti ti-adjustments me-1"></i>Özellikler</a></li>
+        <li class="nav-item"><a href="#pData" class="nav-link" data-bs-toggle="tab"><i class="ti ti-database me-1"></i>Örnek Veri</a></li>
+      </ul>
+      <div class="tab-content">
+        <div class="tab-pane active show" id="pProps"><div id="props"></div></div>
+        <div class="tab-pane" id="pData">
+          <div class="p-3">
+            <div class="small text-secondary mb-3">Önizlemede <code>{{alan}}</code> yerine bu değerler gösterilir. Etiket gönderilirken gerçek ürün verileri kullanılır.</div>
+            <div id="dataForm"></div>
+            <button class="btn btn-sm w-100 mt-2" id="dataReset"><i class="ti ti-refresh me-1"></i>Örnek verilere dön</button>
+          </div>
+        </div>
+      </div>
+    </aside>
+  </div>
+</div>
+<script src="/vendor/tabler/js/tabler.min.js"></script>
+<script src="/static/app.js"></script>
+<script src="/static/design-render.js"></script>
+<script src="/static/designer.js"></script>
+</body>
+</html>

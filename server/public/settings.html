@@ -40,6 +40,17 @@
         </div>
         <div class="card-footer text-end"><button class="btn btn-primary" type="submit">Kaydet</button></div>
       </form>
+
+      <div class="card mt-3">
+        <div class="card-header"><div><h3 class="card-title">Ekran Modelleri</h3><div class="card-subtitle">Etiket panel boyutları. Tasarımlar ve cihazlar bu modellere bağlanır.</div></div>
+          <div class="card-actions"><button class="btn btn-primary btn-sm" id="addModel"><i class="ti ti-plus me-1"></i>Model Ekle</button></div></div>
+        <div class="table-responsive">
+          <table class="table table-vcenter card-table">
+            <thead><tr><th>Model</th><th>Çözünürlük</th><th>Renkler</th><th>Kullanım</th><th>Durum</th><th class="w-1"></th></tr></thead>
+            <tbody id="modelBody"><tr><td colspan="6" class="text-secondary">Yükleniyor...</td></tr></tbody>
+          </table>
+        </div>
+      </div>
     </div></div>
   </div></div>
 </div></div>
@@ -55,6 +66,50 @@ form.addEventListener('submit', function(ev){
   App.apiRequest('POST', '/api/settings', d).then(function(){ App.toast('Ayarlar kaydedildi.'); setTimeout(function(){ location.reload(); }, 700); })
     .catch(function(err){ App.toast(err.message, 'danger'); });
 });
+
+// ---- Ekran modelleri ----
+var e = App.escapeHtml, models = [];
+var COLORS = {bw: 'Siyah-Beyaz', bwr: 'Siyah-Beyaz-Kırmızı', bwy: 'Siyah-Beyaz-Sarı', color: 'Renkli'};
+function loadModels(){
+  return App.apiRequest('GET', '/api/screen-models?all=1').then(function(list){
+    models = list;
+    document.getElementById('modelBody').innerHTML = list.length ? list.map(function(m){
+      return '<tr><td><div class="fw-bold">' + e(m.name) + '</div><div class="small text-secondary mono">' + e(m.code) + (m.diagonal_in ? ' · ' + m.diagonal_in + '"' : '') + '</div></td>' +
+        '<td class="mono">' + m.width_px + ' × ' + m.height_px + '</td><td>' + e(COLORS[m.colors] || m.colors) + '</td>' +
+        '<td class="small">' + m.device_count + ' cihaz · <a href="/designs?modelId=' + m.id + '">' + m.design_count + ' tasarım</a></td>' +
+        '<td>' + App.activeBadge(m.active) + '</td><td><button class="btn btn-sm" data-edit="' + m.id + '">Düzenle</button></td></tr>';
+    }).join('') : App.emptyRow(6, 'Model yok', 'ti-device-desktop');
+  });
+}
+function modelDialog(m){
+  var used = m && (m.device_count + m.design_count) > 0;
+  var lock = used ? ' disabled' : '';
+  App.dialog({
+    title: m ? 'Ekran Modelini Düzenle' : 'Yeni Ekran Modeli', okText: 'Kaydet',
+    html: '<div class="row g-2">' +
+      '<div class="col-sm-6"><label class="form-label required">Model kodu</label><input class="form-control mono" name="code" maxlength="30" required placeholder="EPD29-BWR" value="' + e(m ? m.code : '') + '"></div>' +
+      '<div class="col-sm-6"><label class="form-label required">Ad</label><input class="form-control" name="name" maxlength="80" required placeholder="2.9 inç (BWR)" value="' + e(m ? m.name : '') + '"></div>' +
+      '<div class="col-4"><label class="form-label required">Genişlik (px)</label><input class="form-control" type="number" name="width_px" min="16" max="2000" required value="' + (m ? m.width_px : '') + '"' + lock + '></div>' +
+      '<div class="col-4"><label class="form-label required">Yükseklik (px)</label><input class="form-control" type="number" name="height_px" min="16" max="2000" required value="' + (m ? m.height_px : '') + '"' + lock + '></div>' +
+      '<div class="col-4"><label class="form-label">Boyut (inç)</label><input class="form-control" type="number" step="0.01" name="diagonal_in" value="' + (m && m.diagonal_in ? m.diagonal_in : '') + '"></div>' +
+      '<div class="col-sm-8"><label class="form-label">Renkler</label><select class="form-select" name="colors"' + lock + '>' +
+        Object.keys(COLORS).map(function(k){ return '<option value="' + k + '"' + (m && m.colors === k ? ' selected' : '') + '>' + COLORS[k] + '</option>'; }).join('') + '</select></div>' +
+      '<div class="col-sm-4 d-flex align-items-end"><label class="form-check form-switch mb-2"><input class="form-check-input" type="checkbox" name="active"' + (!m || m.active ? ' checked' : '') + '><span class="form-check-label">Aktif</span></label></div>' +
+      '</div>' + (used ? '<div class="form-hint mt-2"><i class="ti ti-lock me-1"></i>Bu model kullanımda olduğu için çözünürlük ve renk tipi değiştirilemez. Farklı panel için yeni model ekleyin.</div>' :
+        '<div class="form-hint mt-2">Pasif modeller yeni tasarım ve cihaz eklerken listelenmez.</div>'),
+    onOk: function(body){
+      var b = {};
+      body.querySelectorAll('[name]').forEach(function(el){ if (!el.disabled) b[el.name] = el.type === 'checkbox' ? el.checked : el.value; });
+      return App.apiRequest('POST', '/api/screen-models' + (m ? '/' + m.id : ''), b).catch(function(err){ App.toast(err.message, 'danger'); return false; });
+    }
+  }).then(function(r){ if (r){ App.toast('Ekran modeli kaydedildi.'); loadModels(); } });
+}
+document.getElementById('addModel').addEventListener('click', function(){ modelDialog(null); });
+document.getElementById('modelBody').addEventListener('click', function(ev){
+  var b = ev.target.closest('[data-edit]');
+  if (b) modelDialog(models.find(function(m){ return String(m.id) === b.dataset.edit; }));
+});
+App.meReady.then(loadModels);
 </script>
 </body>
 </html>

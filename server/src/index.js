@@ -19,7 +19,8 @@ const app = express();
 app.set('trust proxy', true);
 app.disable('x-powered-by');
 app.use(express.urlencoded({ extended: false, limit: '64kb' }));
-app.use(express.json({ limit: '1mb' }));
+// Tasarim belgeleri gomulu gorsel (logo) icerebildigi icin sinir 6 MB.
+app.use(express.json({ limit: '6mb' }));
 app.use('/static', express.static(path.join(PUBLIC_DIR, 'static')));
 
 // Arayuz kutuphaneleri npm paketlerinden sunulur (CDN'e bagimlilik yok).
@@ -30,6 +31,15 @@ app.use('/vendor/tabler-icons', vendor('@tabler/icons-webfont/dist'));
 app.use('/vendor/xlsx', vendor('xlsx/dist'));
 app.use('/vendor/html5-qrcode', vendor('html5-qrcode'));
 app.use('/vendor/inter', vendor('@fontsource-variable/inter'));
+
+// Tasarim fontlari (TTF): tarayici ve sunucu cizimi ayni dosyalari kullanir.
+const FONT_ROUTES = require('./render').fontRoutes();
+app.get('/fonts/:file', (req, res) => {
+  const f = FONT_ROUTES[req.params.file];
+  if (!f) return res.status(404).end();
+  res.setHeader('Cache-Control', 'public, max-age=604800, immutable');
+  res.type('font/ttf').sendFile(f);
+});
 
 app.get('/favicon.ico', (req, res) => res.type('image/svg+xml').sendFile(path.join(PUBLIC_DIR, 'static', 'favicon.svg')));
 
@@ -51,6 +61,8 @@ app.get('/dashboard', auth.requirePage(), page('dashboard.html'));
 app.get('/profile', auth.requirePage(), page('profile.html'));
 app.get('/history', auth.requirePage('audit.view'), page('history.html'));
 app.get('/updates', auth.requirePage('audit.view'), page('updates.html'));
+app.get('/designs', auth.requirePage('design.view'), page('designs.html'));
+app.get('/designs/:id/edit', auth.requirePage('design.view'), page('designer.html'));
 app.get('/updates/:id', auth.requirePage('audit.view'), page('update-batch.html'));
 app.get('/devices', auth.requirePage('device.view'), page('devices.html'));
 app.get('/devices/:serial', auth.requirePage('device.view'), page('device.html'));
@@ -73,6 +85,7 @@ app.use('/api', require('./routes/gateways').api);
 app.use('/api', require('./routes/devices').api);
 app.use('/api', require('./routes/labels').api);
 app.use('/api', require('./routes/updates').api);
+app.use('/api', require('./routes/designs').api);
 app.use('/api', require('./routes/reports').api);
 app.use('/api', require('./routes/admin').api);
 app.use('/api', (req, res) => res.status(404).type('text').send('HATA: Bulunamadi.'));
@@ -89,6 +102,7 @@ async function start() {
   await db.migrate();
   await importLegacyJson(DATA_DIR);
   await auth.ensureDefaultAdmin();
+  await require('./db/seedDesigns').seedDesigns();
 
   const server = http.createServer(app);
   gateways.attach(server);
