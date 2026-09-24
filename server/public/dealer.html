@@ -1,0 +1,151 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bayi</title>
+<script src="/static/theme-boot.js"></script>
+<link rel="stylesheet" href="/vendor/tabler/css/tabler.min.css">
+<link rel="stylesheet" href="/vendor/tabler-icons/tabler-icons.min.css">
+<link rel="stylesheet" href="/static/app.css">
+</head>
+<body>
+<div class="page">
+<div id="app-sidebar"></div>
+<div class="page-wrapper">
+  <div class="page-header d-print-none"><div class="container-xl"><div class="row g-2 align-items-center">
+    <div class="col">
+      <div class="page-pretitle" id="backLink"><a href="/dealers" class="text-reset"><i class="ti ti-arrow-left me-1"></i>Bayiler</a></div>
+      <h2 class="page-title"><i class="ti ti-building-store me-2"></i><span id="title">...</span><span class="ms-2" id="stateBadge"></span></h2>
+    </div>
+    <div class="col-auto ms-auto"><div class="btn-list" data-can="dealer.manage">
+      <button class="btn" id="toggleBtn"></button>
+      <button class="btn btn-primary" id="editBtn"><i class="ti ti-pencil me-1"></i>Bilgileri Düzenle</button>
+    </div></div>
+  </div></div></div>
+
+  <div class="page-body"><div class="container-xl">
+    <div class="row row-cards mb-3" id="stats"></div>
+    <div class="card">
+      <div class="card-header">
+        <ul class="nav nav-tabs card-header-tabs" data-bs-toggle="tabs">
+          <li class="nav-item"><a href="#tab-info" class="nav-link active" data-bs-toggle="tab"><i class="ti ti-info-circle me-1"></i>Bilgiler</a></li>
+          <li class="nav-item"><a href="#tab-branches" class="nav-link" data-bs-toggle="tab"><i class="ti ti-building me-1"></i>Şubeler</a></li>
+          <li class="nav-item" id="usersTab"><a href="#tab-users" class="nav-link" data-bs-toggle="tab"><i class="ti ti-users me-1"></i>Kullanıcılar</a></li>
+          <li class="nav-item"><a href="#tab-gateways" class="nav-link" data-bs-toggle="tab"><i class="ti ti-router me-1"></i>Gateway'ler</a></li>
+        </ul>
+      </div>
+      <div class="tab-content">
+        <div class="tab-pane active show" id="tab-info"><div class="card-body"><div class="row g-4" id="info"></div></div></div>
+        <div class="tab-pane" id="tab-branches">
+          <div class="card-body py-2 border-bottom text-end"><button class="btn btn-primary btn-sm" id="addBranchBtn" data-can="branch.manage"><i class="ti ti-plus me-1"></i>Şube Ekle</button></div>
+          <div class="table-responsive"><table class="table table-vcenter card-table">
+            <thead><tr><th>Şube</th><th>Yetkili / Telefon</th><th>Konum</th><th>Gateway</th><th>Cihaz</th><th>Kullanıcı</th><th>Durum</th><th class="w-1"></th></tr></thead>
+            <tbody id="branchBody"></tbody></table></div>
+        </div>
+        <div class="tab-pane" id="tab-users">
+          <div class="card-body py-2 border-bottom text-end"><button class="btn btn-primary btn-sm" id="addUserBtn" data-can="user.manage"><i class="ti ti-user-plus me-1"></i>Kullanıcı Ekle</button></div>
+          <div class="table-responsive"><table class="table table-vcenter card-table">
+            <thead><tr><th>Kullanıcı</th><th>Rol</th><th>Şube</th><th>Son giriş</th><th>Durum</th></tr></thead>
+            <tbody id="userBody"></tbody></table></div>
+          <div class="card-footer text-end"><a id="allUsersLink" class="btn btn-sm">Kullanıcılar sayfasında yönet</a></div>
+        </div>
+        <div class="tab-pane" id="tab-gateways">
+          <div class="table-responsive"><table class="table table-vcenter card-table">
+            <thead><tr><th>Gateway</th><th>Durum</th><th>Şube</th><th>Cihaz</th><th>Son görülme</th></tr></thead>
+            <tbody id="gwBody"></tbody></table></div>
+        </div>
+      </div>
+    </div>
+  </div></div>
+</div></div>
+<script src="/vendor/tabler/js/tabler.min.js"></script>
+<script src="/static/app.js"></script>
+<script src="/static/org-forms.js"></script>
+<script>
+var e = App.escapeHtml, $ = function(id){ return document.getElementById(id); };
+var dealerId = parseInt(location.pathname.split('/')[2], 10);
+var dealer = null, branches = [];
+function dt(label, value){ return '<div class="col-sm-6 col-lg-4"><div class="text-secondary small">' + label + '</div><div class="fw-medium">' + (value || '<span class="text-secondary">-</span>') + '</div></div>'; }
+function stat(label, used, max, icon, href){
+  var limit = max == null ? '<div class="small text-secondary">limitsiz</div>' : '<div class="progress progress-sm mt-2"><div class="progress-bar ' + (used >= max ? 'bg-red' : 'bg-primary') + '" style="width:' + Math.min(100, max ? used * 100 / max : 100) + '%"></div></div><div class="small text-secondary mt-1">limit ' + max + '</div>';
+  return '<div class="col-6 col-lg-3"><a class="card card-sm card-link text-reset stat-card" href="' + href + '"><div class="card-body"><div class="d-flex align-items-center gap-3"><span class="avatar bg-primary-lt"><i class="ti ' + icon + ' fs-2"></i></span>' +
+    '<div class="flex-fill"><div class="stat-value">' + used + '</div><div class="stat-label">' + label + '</div>' + (max !== undefined ? limit : '') + '</div></div></div></a></div>';
+}
+function loadDealer(){
+  return App.apiRequest('GET', '/api/dealers/' + dealerId).then(function(d){
+    dealer = d;
+    $('title').textContent = d.name;
+    $('stateBadge').innerHTML = App.activeBadge(d.active);
+    $('toggleBtn').innerHTML = d.active ? '<i class="ti ti-player-pause me-1"></i>Pasif Yap' : '<i class="ti ti-player-play me-1"></i>Aktif Yap';
+    $('stats').innerHTML = stat('Şube', d.branch_count, undefined, 'ti-building', '#tab-branches') +
+      stat('Gateway', d.gateway_count, d.max_gateways, 'ti-router', '/gateways?dealerId=' + d.id) +
+      stat('Cihaz', d.device_count, d.max_devices, 'ti-tags', '/devices?dealerId=' + d.id) +
+      stat('Kullanıcı', d.user_count, undefined, 'ti-users', '#tab-users');
+    var addr = [d.address, [d.district, d.city].filter(Boolean).join(' / '), d.postal_code].filter(Boolean).map(e).join('<br>');
+    $('info').innerHTML = dt('Bayi kodu', d.code ? '<span class="mono">' + e(d.code) + '</span>' : '') + dt('Ticari ünvan', e(d.legal_name || '')) +
+      dt('Vergi dairesi / no', [d.tax_office, d.tax_number].filter(Boolean).map(e).join(' · ')) +
+      dt('Yetkili', e(d.contact_name || '')) + dt('Telefon', e(d.phone || '')) + dt('E-posta', e(d.email || '')) +
+      dt('Adres', addr) + dt('Sözleşme bitişi', d.contract_end ? e(d.contract_end) : '') + dt('Oluşturulma', App.formatDate(d.created_at)) +
+      (d.notes ? '<div class="col-12"><div class="text-secondary small">Not</div><div class="text-pre">' + e(d.notes) + '</div></div>' : '');
+  }).catch(function(err){ $('title').textContent = 'Bayi bulunamadı'; App.toast(err.message, 'danger'); });
+}
+function loadBranches(){
+  return App.apiRequest('GET', '/api/branches?dealerId=' + dealerId).then(function(list){
+    branches = list;
+    var canManage = currentUser.can['branch.manage'];
+    $('branchBody').innerHTML = list.length ? list.map(function(b){
+      return '<tr><td><div class="fw-bold">' + e(b.name) + (b.code ? ' <span class="badge bg-secondary-lt mono">' + e(b.code) + '</span>' : '') + '</div></td>' +
+        '<td>' + e(b.contact_name || '-') + '<div class="small text-secondary">' + e(b.phone || b.email || '') + '</div></td>' +
+        '<td>' + e([b.district, b.city].filter(Boolean).join(' / ') || '-') + '</td>' +
+        '<td><a href="/gateways?dealerId=' + dealerId + '">' + b.gateway_count + '</a></td><td><a href="/devices?branchId=' + b.id + '">' + b.device_count + '</a></td><td>' + b.user_count + '</td>' +
+        '<td>' + App.activeBadge(b.active) + '</td>' +
+        '<td>' + (canManage ? '<button class="btn btn-sm btn-icon" data-edit-branch="' + b.id + '" title="Düzenle"><i class="ti ti-pencil"></i></button>' : '') + '</td></tr>';
+    }).join('') : App.emptyRow(8, 'Şube yok - bayi doğrudan bayi seviyesinde çalışıyor', 'ti-building');
+  });
+}
+function loadUsers(){
+  if (!currentUser.can['user.view']) { $('usersTab').hidden = true; return; }
+  return App.apiRequest('GET', '/api/users?dealerId=' + dealerId).then(function(list){
+    $('userBody').innerHTML = list.length ? list.map(function(u){
+      return '<tr><td><div class="fw-bold">' + e(u.full_name || u.login) + '</div><div class="small text-secondary">' + e(u.login) + (u.title ? ' · ' + e(u.title) : '') + '</div></td>' +
+        '<td>' + App.roleBadge(u.role) + '</td><td>' + e(u.branch_name || (u.role === 'dealer_admin' || u.role === 'operator' ? 'tüm şubeler' : '-')) + '</td>' +
+        '<td>' + App.formatRelative(u.last_login_at) + '</td><td>' + App.activeBadge(u.active) + (u.locked ? ' <span class="badge bg-red-lt">kilitli</span>' : '') + '</td></tr>';
+    }).join('') : App.emptyRow(5, 'Bu bayide kullanıcı yok', 'ti-users');
+  });
+}
+function loadGateways(){
+  return App.apiRequest('GET', '/api/gateways?dealerId=' + dealerId).then(function(list){
+    $('gwBody').innerHTML = list.length ? list.map(function(g){
+      return '<tr class="cursor-pointer" onclick="location.href=\'/gateways/' + e(g.id) + '\'"><td><div class="fw-bold">' + e(g.name) + '</div><div class="small text-secondary mono">' + e(g.id) + '</div></td>' +
+        '<td>' + App.statusBadge(g.status, g.statusLabel) + '</td><td>' + e(g.branchName || '-') + '</td><td>' + (g.deviceCount || 0) + '</td>' +
+        '<td>' + (g.online ? '<span class="text-success">şu an</span>' : App.formatRelative(g.lastSeen)) + '</td></tr>';
+    }).join('') : App.emptyRow(5, 'Bu bayide gateway yok', 'ti-router');
+  });
+}
+function reloadAll(){ loadDealer(); loadBranches(); loadUsers(); loadGateways(); }
+
+$('editBtn').addEventListener('click', function(){ OrgForms.openDealer(dealer).then(function(r){ if (r) loadDealer(); }); });
+$('toggleBtn').addEventListener('click', function(){
+  var msg = dealer.active ? dealer.name + ' pasif yapılsın mı? Bayinin tüm kullanıcılarının oturumu kapanır, giriş yapamaz ve etiket gönderimi durur.' : dealer.name + ' tekrar aktif yapılsın mı?';
+  App.confirm(msg, {danger: dealer.active}).then(function(ok){
+    if (ok) App.apiRequest('POST', '/api/dealers/' + dealerId, {active: !dealer.active}).then(function(){ App.toast('Kaydedildi.'); loadDealer(); }).catch(function(err){ App.toast(err.message, 'danger'); });
+  });
+});
+$('addBranchBtn').addEventListener('click', function(){ OrgForms.openBranch(null, {dealerId: dealerId}).then(function(r){ if (r) { loadBranches(); loadDealer(); } }); });
+$('branchBody').addEventListener('click', function(ev){
+  var b = ev.target.closest('[data-edit-branch]');
+  if (!b) return;
+  var br = branches.filter(function(x){ return String(x.id) === b.dataset.editBranch; })[0];
+  OrgForms.openBranch(br).then(function(r){ if (r) loadBranches(); });
+});
+$('addUserBtn').addEventListener('click', function(){
+  OrgForms.openUser(null, {dealers: [dealer], branches: branches, dealerId: dealerId, role: 'dealer_admin'}).then(function(r){ if (r) { loadUsers(); loadDealer(); } });
+});
+App.meReady.then(function(me){
+  if (!me.can['dealer.view']) $('backLink').innerHTML = '<span>Bayi bilgilerim</span>';
+  $('allUsersLink').href = '/users?dealerId=' + dealerId;
+  reloadAll();
+});
+</script>
+</body>
+</html>

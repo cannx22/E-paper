@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sistem Ayarları</title>
+<script src="/static/theme-boot.js"></script>
+<link rel="stylesheet" href="/vendor/tabler/css/tabler.min.css">
+<link rel="stylesheet" href="/vendor/tabler-icons/tabler-icons.min.css">
+<link rel="stylesheet" href="/static/app.css">
+</head>
+<body>
+<div class="page">
+<div id="app-sidebar"></div>
+<div class="page-wrapper">
+  <div class="page-header d-print-none"><div class="container-xl">
+    <div class="page-pretitle">Merkez yönetimi</div><h2 class="page-title"><i class="ti ti-settings me-2"></i>Sistem Ayarları</h2>
+  </div></div>
+  <div class="page-body"><div class="container-xl">
+    <div class="row justify-content-center"><div class="col-lg-8">
+      <form class="card" id="form">
+        <div class="card-body">
+          <h3 class="card-title">Genel</h3>
+          <div class="mb-4"><label class="form-label">Firma / Panel adı</label><input class="form-control" name="company_name" maxlength="80" required>
+            <div class="form-hint">Sol menüde ve sekme başlığında görünür.</div></div>
+
+          <h3 class="card-title">Cihaz Kaydı</h3>
+          <label class="form-check form-switch mb-1"><input class="form-check-input" type="checkbox" name="inventory_required"><span class="form-check-label">Seri no havuzu zorunlu</span></label>
+          <div class="form-hint mb-4">Açıkken bayiler yalnızca <a href="/inventory">Seri No Havuzu</a>'nda bulunan (ve kendilerine ya da kimseye tahsis edilmemiş) seri numaralarını cihaz olarak ekleyebilir. Yanlış yazılan veya başkasına ait numaraların eklenmesini önler.</div>
+
+          <h3 class="card-title">Güvenlik</h3>
+          <div class="mb-2"><label class="form-label">Minimum şifre uzunluğu</label><input class="form-control" name="password_min_length" type="number" min="6" max="64" style="max-width:140px"></div>
+          <div class="form-hint">Şifreler ayrıca en az bir harf ve bir rakam içermeli. Art arda 5 hatalı girişte hesap 15 dakika kilitlenir.</div>
+        </div>
+        <div class="card-footer text-end"><button class="btn btn-primary" type="submit">Kaydet</button></div>
+      </form>
+    </div></div>
+  </div></div>
+</div></div>
+<script src="/vendor/tabler/js/tabler.min.js"></script>
+<script src="/static/app.js"></script>
+<script>
+var form = document.getElementById('form');
+App.meReady.then(function(){ return App.apiRequest('GET', '/api/settings'); }).then(function(s){ App.fillForm(form, s); });
+form.addEventListener('submit', function(ev){
+  ev.preventDefault();
+  var d = App.formData(form);
+  d.password_min_length = parseInt(d.password_min_length, 10);
+  App.apiRequest('POST', '/api/settings', d).then(function(){ App.toast('Ayarlar kaydedildi.'); setTimeout(function(){ location.reload(); }, 700); })
+    .catch(function(err){ App.toast(err.message, 'danger'); });
+});
+</script>
+</body>
+</html>

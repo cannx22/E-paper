@@ -1,0 +1,219 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Seri No Havuzu</title>
+<script src="/static/theme-boot.js"></script>
+<link rel="stylesheet" href="/vendor/tabler/css/tabler.min.css">
+<link rel="stylesheet" href="/vendor/tabler-icons/tabler-icons.min.css">
+<link rel="stylesheet" href="/static/app.css">
+</head>
+<body>
+<div class="page">
+<div id="app-sidebar"></div>
+<div class="page-wrapper">
+  <div class="page-header d-print-none"><div class="container-xl"><div class="row g-2 align-items-center">
+    <div class="col"><div class="page-pretitle">Üretilen e-paper cihazların seri numaraları</div><h2 class="page-title"><i class="ti ti-barcode me-2"></i>Seri No Havuzu</h2></div>
+    <div class="col-auto ms-auto"><div class="btn-list"><button class="btn btn-primary" id="openImportBtn"><i class="ti ti-plus me-1"></i>Havuza Ekle</button></div></div>
+  </div></div></div>
+  <div class="page-body"><div class="container-xl">
+    <div class="alert" id="modeAlert"></div>
+    <div class="row row-cards mb-3" id="stats"></div>
+    <div class="card">
+      <div class="card-body border-bottom py-3">
+        <div class="row g-2">
+          <div class="col-md-3"><div class="input-icon"><span class="input-icon-addon"><i class="ti ti-search"></i></span><input class="form-control mono" id="fSearch" placeholder="Seri no başlangıcı"></div></div>
+          <div class="col-md"><select class="form-select" id="fStatus"><option value="">Tüm durumlar</option><option value="stock">Stokta</option><option value="allocated">Bayiye tahsisli</option><option value="used">Kullanımda</option></select></div>
+          <div class="col-md"><select class="form-select" id="fDealer"></select></div>
+          <div class="col-md"><select class="form-select" id="fBatch"></select></div>
+          <div class="col-md-auto d-flex align-items-center"><span class="small text-secondary" id="countInfo"></span></div>
+        </div>
+      </div>
+      <div class="card-body py-2 bg-yellow-lt" id="bulkBar" hidden>
+        <div class="d-flex flex-wrap gap-2 align-items-center"><strong><span id="selCount">0</span> seri no seçili</strong>
+          <button class="btn btn-sm btn-primary" data-bulk="allocate"><i class="ti ti-building-store me-1"></i>Bayiye Tahsis Et</button>
+          <button class="btn btn-sm" data-bulk="unallocate">Tahsisi Kaldır</button>
+          <button class="btn btn-sm btn-ghost-danger" data-bulk="delete"><i class="ti ti-trash me-1"></i>Havuzdan Sil</button>
+          <button class="btn btn-sm btn-ghost-secondary ms-auto" data-bulk="clear">Seçimi kaldır</button></div>
+      </div>
+      <div class="table-responsive">
+        <table class="table table-vcenter card-table table-sm">
+          <thead><tr><th class="w-1"><input class="form-check-input m-0" type="checkbox" id="checkAll"></th><th>Seri No</th><th>Model</th><th>Parti</th><th>Bayi</th><th>Durum</th><th>Eklenme</th></tr></thead>
+          <tbody id="body"></tbody>
+        </table>
+      </div>
+      <div class="card-footer text-center" id="moreWrap" hidden><button class="btn" id="moreBtn">Daha fazla</button></div>
+    </div>
+  </div></div>
+</div></div>
+
+<div class="modal modal-blur fade" id="importModal" tabindex="-1"><div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable"><div class="modal-content">
+  <div class="modal-header"><h5 class="modal-title"><i class="ti ti-barcode me-2"></i>Havuza Seri No Ekle</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+  <div class="modal-body">
+    <ul class="nav nav-pills mb-3" data-bs-toggle="tabs">
+      <li class="nav-item"><a href="#imp-range" class="nav-link active" data-bs-toggle="tab">Aralık</a></li>
+      <li class="nav-item"><a href="#imp-list" class="nav-link" data-bs-toggle="tab">Liste / Excel</a></li>
+    </ul>
+    <div class="tab-content mb-3">
+      <div class="tab-pane active show" id="imp-range"><div class="row g-3">
+        <div class="col-md-6"><label class="form-label">İlk seri no</label><input class="form-control mono" id="rFrom" maxlength="8" inputmode="numeric" placeholder="80156700"></div>
+        <div class="col-md-6"><label class="form-label">Son seri no</label><input class="form-control mono" id="rTo" maxlength="8" inputmode="numeric" placeholder="80156799"></div>
+        <div class="col-12 form-hint" id="rInfo">Bir üretim partisindeki ardışık seri numaralarını tek seferde ekleyin (en fazla 20.000).</div>
+      </div></div>
+      <div class="tab-pane" id="imp-list">
+        <textarea class="form-control mono" id="listText" rows="6" placeholder="80156767&#10;80156768"></textarea>
+        <div class="mt-2"><input type="file" class="form-control" id="listFile" accept=".xlsx,.xls,.csv"><div class="form-hint">Excel sütunları: Seri No, Model, Parti</div></div>
+      </div>
+    </div>
+    <div class="row g-3">
+      <div class="col-md-4"><label class="form-label">Ekran modeli</label><select class="form-select" id="iModel"></select></div>
+      <div class="col-md-4"><label class="form-label">Parti / Üretim</label><input class="form-control" id="iBatch" maxlength="60" placeholder="2026-09-A"></div>
+      <div class="col-md-4"><label class="form-label">Doğrudan tahsis</label><select class="form-select" id="iDealer"></select></div>
+    </div>
+    <div id="impMsg" hidden></div>
+    <div class="table-responsive mt-2" id="impReportWrap" hidden style="max-height:240px"><table class="table table-sm"><tbody id="impReport"></tbody></table></div>
+  </div>
+  <div class="modal-footer"><button type="button" class="btn btn-link link-secondary me-auto" data-bs-dismiss="modal">Kapat</button>
+    <button class="btn" id="impCheckBtn">Kontrol Et</button><button class="btn btn-success" id="impCommitBtn" hidden></button></div>
+</div></div></div>
+
+<script src="/vendor/tabler/js/tabler.min.js"></script>
+<script src="/vendor/xlsx/xlsx.full.min.js"></script>
+<script src="/static/app.js"></script>
+<script>
+var e = App.escapeHtml, $ = function(id){ return document.getElementById(id); };
+var PAGE = 500, rows = [], total = 0, selected = new Set(), dealers = [], impRows = [];
+function stat(v, l, color){ return '<div class="col-6 col-md-3"><div class="card card-sm stat-card"><div class="card-body"><div class="stat-value text-' + color + '">' + v + '</div><div class="stat-label">' + l + '</div></div></div></div>'; }
+function query(offset){
+  var p = ['limit=' + PAGE, 'offset=' + offset];
+  if ($('fSearch').value.trim()) p.push('q=' + encodeURIComponent($('fSearch').value.trim()));
+  ['fStatus', 'fDealer', 'fBatch'].forEach(function(id, i){ if ($(id).value) p.push(['status', 'dealerId', 'batch'][i] + '=' + encodeURIComponent($(id).value)); });
+  return '/api/inventory?' + p.join('&');
+}
+function render(){
+  $('countInfo').textContent = rows.length + ' / ' + total;
+  $('body').innerHTML = rows.length ? rows.map(function(r){
+    var status = r.used ? '<a href="/devices/' + e(r.serial) + '" class="badge bg-green-lt">kullanımda' + (r.device_name ? ' · ' + e(r.device_name) : '') + '</a>' : r.dealer_id ? '<span class="badge bg-blue-lt">tahsisli</span>' : '<span class="badge bg-secondary-lt">stokta</span>';
+    return '<tr><td><input class="form-check-input m-0" type="checkbox" data-sel="' + e(r.serial) + '"' + (selected.has(r.serial) ? ' checked' : '') + (r.used ? ' disabled' : '') + '></td>' +
+      '<td class="mono fw-bold">' + e(r.serial) + '</td><td class="text-secondary">' + e(r.model_name || '-') + '</td><td>' + e(r.batch || '-') + '</td>' +
+      '<td>' + e(r.dealer_name || '-') + '</td><td>' + status + '</td><td class="small text-secondary">' + App.formatDate(r.created_at) + '</td></tr>';
+  }).join('') : App.emptyRow(7, 'Havuzda seri no yok', 'ti-barcode');
+  $('moreWrap').hidden = rows.length >= total;
+  $('selCount').textContent = selected.size;
+  $('bulkBar').hidden = !selected.size;
+}
+function refresh(){
+  return App.apiRequest('GET', query(0)).then(function(r){
+    rows = r.rows; total = r.total;
+    var s = r.summary;
+    $('stats').innerHTML = stat(s.total, 'Toplam', 'reset') + stat(s.stock, 'Stokta', 'secondary') + stat(s.allocated, 'Bayiye tahsisli', 'blue') + stat(s.used, 'Kullanımda', 'green');
+    var cur = $('fBatch').value;
+    App.fillSelect('fBatch', r.batches.map(function(b){ return {id: b, name: b}; }), 'Tüm partiler', cur);
+    render();
+  });
+}
+$('moreBtn').addEventListener('click', function(){ App.apiRequest('GET', query(rows.length)).then(function(r){ rows = rows.concat(r.rows); total = r.total; render(); }); });
+var t = null;
+$('fSearch').addEventListener('input', function(){ clearTimeout(t); t = setTimeout(refresh, 300); });
+['fStatus', 'fDealer', 'fBatch'].forEach(function(id){ $(id).addEventListener('change', refresh); });
+$('body').addEventListener('change', function(ev){ var s = ev.target.dataset.sel; if (!s) return; ev.target.checked ? selected.add(s) : selected.delete(s); render(); });
+$('checkAll').addEventListener('change', function(ev){ rows.forEach(function(r){ if (r.used) return; ev.target.checked ? selected.add(r.serial) : selected.delete(r.serial); }); render(); });
+$('bulkBar').addEventListener('click', function(ev){
+  var b = ev.target.closest('[data-bulk]'); if (!b) return;
+  var act = b.dataset.bulk, serials = Array.from(selected);
+  if (act === 'clear'){ selected.clear(); render(); return; }
+  var done = function(r){ App.toast(r.affected + ' seri no güncellendi' + (r.skipped ? ' (' + r.skipped + ' kullanımda olduğu için atlandı)' : '') + '.'); selected.clear(); refresh(); };
+  var err = function(x){ App.toast(x.message, 'danger'); };
+  if (act === 'allocate'){
+    App.dialog({title: 'Bayiye tahsis et', okText: 'Tahsis Et',
+      html: '<p class="text-secondary">' + serials.length + ' seri no seçilen bayiye tahsis edilecek; bu numaralar sadece o bayi tarafından cihaz olarak eklenebilir.</p><select class="form-select">' + dealers.map(function(d){ return '<option value="' + d.id + '">' + e(d.name) + '</option>'; }).join('') + '</select>',
+      onOk: function(body){ return body.querySelector('select').value; }
+    }).then(function(dealerId){ if (dealerId) App.apiRequest('POST', '/api/inventory/allocate', {serials: serials, dealerId: dealerId}).then(done).catch(err); });
+  } else if (act === 'unallocate'){
+    App.apiRequest('POST', '/api/inventory/allocate', {serials: serials, dealerId: null}).then(done).catch(err);
+  } else {
+    App.confirm(serials.length + ' seri no havuzdan silinsin mi? (Kullanımdakiler atlanır)', {danger: true, okText: 'Sil'}).then(function(ok){ if (ok) App.apiRequest('POST', '/api/inventory/delete', {serials: serials}).then(done).catch(err); });
+  }
+});
+
+// ---- Havuza ekleme ----
+function rangeRows(){
+  var a = $('rFrom').value.trim(), b = $('rTo').value.trim();
+  if (!/^\d{8}$/.test(a) || !/^\d{8}$/.test(b)) throw new Error('Aralık için 8 haneli ilk ve son seri no girin.');
+  var from = parseInt(a, 10), to = parseInt(b, 10);
+  if (to < from) throw new Error('Son seri no ilkinden küçük olamaz.');
+  if (to - from + 1 > 20000) throw new Error('Tek seferde en fazla 20.000 seri no eklenebilir.');
+  var out = []; for (var n = from; n <= to; n++) out.push({serial: String(n).padStart(8, '0')});
+  return out;
+}
+function listRows(){
+  var file = $('listFile').files[0];
+  if (!file) return Promise.resolve($('listText').value.split(/\r?\n/).map(function(l){ return l.trim(); }).filter(Boolean).map(function(l){ return {serial: l.split(/[;\t,]/)[0].trim()}; }));
+  return new Promise(function(resolve, reject){
+    var r = new FileReader();
+    r.onload = function(ev){
+      try {
+        var wb = XLSX.read(new Uint8Array(ev.target.result), {type: 'array', raw: false});
+        var json = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], {defval: '', raw: false});
+        resolve(json.map(function(row){
+          var get = function(names){ var k = Object.keys(row).filter(function(x){ return names.indexOf(x.trim().toLocaleLowerCase('tr')) !== -1; })[0]; return k ? String(row[k]).trim() : ''; };
+          return {serial: get(['seri no', 'seri', 'serial']), model: get(['model', 'ekran modeli']), batch: get(['parti', 'batch', 'üretim'])};
+        }).filter(function(x){ return x.serial; }));
+      } catch (x){ reject(x); }
+    };
+    r.readAsArrayBuffer(file);
+  });
+}
+function collect(){
+  var rangeActive = $('imp-range').classList.contains('active');
+  try { return rangeActive ? Promise.resolve(rangeRows()) : listRows(); } catch (x){ return Promise.reject(x); }
+}
+function defaults(){ return {modelId: $('iModel').value || null, batch: $('iBatch').value, dealerId: $('iDealer').value || null}; }
+function report(r){
+  var bad = r.rows.filter(function(x){ return !x.ok; });
+  $('impReportWrap').hidden = !bad.length;
+  $('impReport').innerHTML = bad.slice(0, 300).map(function(x){ return '<tr><td class="mono">' + e(x.serial) + '</td><td class="text-danger">' + e(x.message) + '</td></tr>'; }).join('');
+}
+$('openImportBtn').addEventListener('click', function(){ App.hideMsg('impMsg'); $('impCommitBtn').hidden = true; App.showModal('importModal'); });
+$('impCheckBtn').addEventListener('click', function(){
+  $('impCommitBtn').hidden = true;
+  collect().then(function(list){
+    impRows = list;
+    if (!list.length) throw new Error('Eklenecek seri no yok.');
+    return App.apiRequest('POST', '/api/inventory/import', {rows: list, defaults: defaults(), dryRun: true});
+  }).then(function(r){
+    report(r);
+    App.showMsg('impMsg', r.valid > 0, r.total + ' seri no kontrol edildi: ' + r.valid + ' eklenebilir, ' + r.invalid + ' hatalı/tekrar.');
+    if (r.valid){ $('impCommitBtn').textContent = r.valid + ' seri noyu havuza ekle'; $('impCommitBtn').hidden = false; }
+  }).catch(function(x){ App.showMsg('impMsg', false, x.message); });
+});
+$('impCommitBtn').addEventListener('click', function(){
+  var btn = this; App.setBusy(btn, true);
+  App.apiRequest('POST', '/api/inventory/import', {rows: impRows, defaults: defaults(), dryRun: false}).then(function(r){
+    report(r); btn.hidden = true;
+    App.showMsg('impMsg', true, r.valid + ' seri no havuza eklendi.');
+    refresh();
+  }).catch(function(x){ App.showMsg('impMsg', false, x.message); }).then(function(){ App.setBusy(btn, false); });
+});
+['rFrom', 'rTo'].forEach(function(id){ $(id).addEventListener('input', function(){
+  this.value = this.value.replace(/\D/g, '').slice(0, 8);
+  var a = parseInt($('rFrom').value, 10), b = parseInt($('rTo').value, 10);
+  if ($('rFrom').value.length === 8 && $('rTo').value.length === 8 && b >= a) $('rInfo').textContent = (b - a + 1) + ' seri no eklenecek.';
+}); });
+
+App.meReady.then(function(me){
+  $('modeAlert').className = 'alert ' + (me.inventoryRequired ? 'alert-success' : 'alert-warning');
+  $('modeAlert').innerHTML = me.inventoryRequired
+    ? '<i class="ti ti-shield-check me-2 fs-2"></i><div><b>Havuz zorunlu:</b> bayiler yalnızca havuzdaki (ve kendilerine veya kimseye tahsis edilmemiş) seri numaralarını cihaz olarak ekleyebilir. <a href="/settings">Ayarlar</a></div>'
+    : '<i class="ti ti-info-circle me-2 fs-2"></i><div><b>Havuz zorunlu değil:</b> bayiler her seri numarasını ekleyebilir; sadece başka bayiye tahsisli numaralar reddedilir. Zorunlu yapmak için <a href="/settings">Sistem Ayarları</a>.</div>';
+  return Promise.all([App.apiRequest('GET', '/api/dealers'), App.apiRequest('GET', '/api/screen-models')]).then(function(r){
+    dealers = r[0];
+    App.fillSelect('fDealer', dealers, 'Tüm bayiler');
+    App.fillSelect('iDealer', dealers, '(tahsis etme - stokta kalsın)');
+    App.fillSelect('iModel', r[1].map(function(m){ return {id: m.id, name: m.name}; }), '(belirtilmedi)');
+    return refresh();
+  });
+});
+</script>
+</body>
+</html>

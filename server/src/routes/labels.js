@@ -32,6 +32,7 @@ api.post('/send', auth.requireApi('label.send'), async (req, res) => {
   if (device) {
     if (!inScope(req.user, device)) fail(404, 'Cihaz bulunamadi.');
     if (device.state === 'disabled') fail(409, 'Cihaz devre disi.');
+    if (device.dealer_active === false) fail(409, 'Cihazin bagli oldugu bayi pasif.');
   }
   const gatewayId = b.gatewayId || (device && device.gateway_id);
   if (!gatewayId) {
@@ -55,6 +56,7 @@ api.post('/send', auth.requireApi('label.send'), async (req, res) => {
     before = device.last_content;
     await db.query(
       `UPDATE devices SET last_update_at = now(), last_update_ok = $2, last_update_message = $3,
+                          last_ok_at = CASE WHEN $2 THEN now() ELSE last_ok_at END,
                           last_content = CASE WHEN $2 THEN $4::jsonb ELSE last_content END
         WHERE id = $1`,
       [serial, result.ok, result.message, JSON.stringify(fields)],

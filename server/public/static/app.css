@@ -1,0 +1,89 @@
+/* Tabler uzerine ortak duzenlemeler. Marka rengi: e-paper kirmizisi yerine
+   modern bir mor-mavi (primary), durumlar icin Tabler renkleri. */
+:root, [data-bs-theme] {
+  --tblr-primary: #4f6ef7;
+  --tblr-primary-rgb: 79, 110, 247;
+  --tblr-font-sans-serif: "Inter", -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+}
+[data-bs-theme="dark"] {
+  --tblr-body-bg: #0f1420;
+  --tblr-bg-surface: #161c2b;
+  --tblr-bg-surface-secondary: #1b2233;
+  --tblr-border-color: #262f44;
+  --tblr-border-color-translucent: rgba(120, 140, 180, .16);
+}
+body { font-feature-settings: "cv03", "cv04", "cv11"; }
+
+/* Sol menu */
+.navbar-vertical { --tblr-navbar-bg: #0b0f19; }
+[data-bs-theme="light"] .navbar-vertical { --tblr-navbar-bg: #111827; }
+.navbar-vertical .navbar-brand { font-weight: 700; letter-spacing: -.01em; }
+.navbar-vertical .brand-mark {
+  width: 32px; height: 32px; border-radius: 9px; display: inline-flex; align-items: center; justify-content: center;
+  background: linear-gradient(135deg, #4f6ef7, #8b5cf6); color: #fff; margin-right: .6rem; font-size: 18px;
+}
+.navbar-vertical .nav-section {
+  font-size: .68rem; text-transform: uppercase; letter-spacing: .08em; color: rgba(255,255,255,.38);
+  padding: 1rem 1.25rem .35rem;
+}
+.navbar-vertical .nav-link.active { background: rgba(79,110,247,.18); color: #fff !important; border-radius: 8px; }
+.navbar-vertical .nav-link { border-radius: 8px; margin: 1px .5rem; }
+.navbar-vertical .nav-link-icon .ti { font-size: 1.15rem; }
+.navbar-vertical .scope-chip { font-size: .72rem; color: rgba(255,255,255,.55); padding: 0 1.25rem .75rem; }
+
+.page-header .page-title .ti { color: var(--tblr-primary); }
+.page-header .page-title .badge { font-size: .72rem; vertical-align: middle; }
+.page-header .page-title .badge .status-dot { width: .45rem; height: .45rem; }
+.card { border-radius: 12px; }
+.card-header { min-height: 3.25rem; }
+.table thead th { font-size: .7rem; letter-spacing: .04em; }
+.table td { vertical-align: middle; }
+.mono { font-family: "JetBrains Mono", Consolas, "Courier New", monospace; font-size: .92em; }
+.text-pre { white-space: pre-wrap; }
+.cursor-pointer { cursor: pointer; }
+.w-1 { width: 1%; white-space: nowrap; }
+.min-w-0 { min-width: 0; }
+
+/* Durum rozetleri (gateway) */
+.status-dot { display: inline-block; width: .5rem; height: .5rem; border-radius: 50%; margin-right: .35rem; vertical-align: middle; }
+.st-active   { --st: var(--tblr-green); }
+.st-offline  { --st: var(--tblr-secondary); }
+.st-error    { --st: var(--tblr-red); }
+.st-awaiting { --st: var(--tblr-azure); }
+.st-registered { --st: var(--tblr-indigo); }
+.st-pending  { --st: var(--tblr-yellow); }
+.st-disabled { --st: var(--tblr-dark); }
+.badge.st { background: color-mix(in srgb, var(--st) 18%, transparent); color: var(--st); border: 1px solid color-mix(in srgb, var(--st) 35%, transparent); }
+.st .status-dot, .status-dot.st { background: var(--st); }
+[data-bs-theme="dark"] .st-disabled { --st: #9aa4b8; }
+
+/* Istatistik kartlari */
+.stat-card .stat-value { font-size: 1.75rem; font-weight: 700; line-height: 1.1; }
+.stat-card .stat-label { color: var(--tblr-secondary); font-size: .72rem; text-transform: uppercase; letter-spacing: .04em; line-height: 1.25; }
+.stat-card .avatar { width: 2.6rem; height: 2.6rem; }
+
+/* Toplu islem cubugu */
+.bulk-bar { position: sticky; top: .5rem; z-index: 5; }
+
+/* Bildirim balonlari */
+#toast-stack { position: fixed; right: 1rem; bottom: 1rem; z-index: 2000; display: flex; flex-direction: column; gap: .5rem; max-width: min(420px, calc(100vw - 2rem)); }
+
+/* Etiket onizleme */
+.preview-frame { background: #1c2230; border-radius: 12px; padding: 12px; display: flex; justify-content: center; }
+#labelCanvas { width: 100%; max-width: 480px; height: auto; image-rendering: pixelated; background: #fff; border-radius: 4px; }
+.counter.over { color: var(--tblr-red) !important; font-weight: 700; }
+.bulk-status.ok { color: var(--tblr-green); font-weight: 600; }
+.bulk-status.err { color: var(--tblr-red); font-weight: 600; }
+
+/* Giris sayfasi */
+.auth-bg {
+  min-height: 100vh;
+  background: radial-gradient(1200px 600px at 10% -10%, rgba(79,110,247,.25), transparent 60%),
+              radial-gradient(900px 500px at 110% 110%, rgba(139,92,246,.22), transparent 60%),
+              var(--tblr-body-bg);
+}
+
+@media (max-width: 767.98px) {
+  .page-header .col-auto.ms-auto { width: 100%; }
+  .page-header .btn-list { justify-content: flex-start; }
+}

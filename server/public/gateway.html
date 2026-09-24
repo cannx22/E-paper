@@ -1,0 +1,168 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Gateway</title>
+<script src="/static/theme-boot.js"></script>
+<link rel="stylesheet" href="/vendor/tabler/css/tabler.min.css">
+<link rel="stylesheet" href="/vendor/tabler-icons/tabler-icons.min.css">
+<link rel="stylesheet" href="/static/app.css">
+</head>
+<body>
+<div class="page">
+<div id="app-sidebar"></div>
+<div class="page-wrapper">
+  <div class="page-header d-print-none"><div class="container-xl"><div class="row g-2 align-items-center">
+    <div class="col">
+      <div class="page-pretitle"><a href="/gateways" class="text-reset"><i class="ti ti-arrow-left me-1"></i>Gateway'ler</a></div>
+      <h2 class="page-title"><i class="ti ti-router me-2"></i><span id="title">...</span><span class="ms-2" id="statusBadge"></span></h2>
+    </div>
+    <div class="col-auto ms-auto"><div class="btn-list">
+      <button class="btn" id="restartBtn" data-can="gateway.manage" hidden><i class="ti ti-refresh me-1"></i>Yeniden Başlat</button>
+      <button class="btn" id="moveBtn" data-can="gateway.assign"><i class="ti ti-arrows-transfer-down me-1"></i>Cihazları Taşı</button>
+      <a class="btn" id="labelBtn" target="_blank" data-can="gateway.register" hidden><i class="ti ti-qrcode me-1"></i>QR Etiketi</a>
+    </div></div>
+  </div></div></div>
+
+  <div class="page-body"><div class="container-xl">
+    <div class="row row-cards">
+      <div class="col-lg-4">
+        <div class="card mb-3">
+          <div class="card-header"><h3 class="card-title">Bilgiler</h3></div>
+          <div class="card-body">
+            <form id="infoForm">
+              <div class="mb-3"><label class="form-label">İsim</label><input class="form-control" name="name" maxlength="60" required></div>
+              <div class="mb-3"><label class="form-label">Konum</label><input class="form-control" name="location" maxlength="200" placeholder="Örn. Kasa arkası, 2. kat"></div>
+              <div class="mb-3"><label class="form-label">Not</label><textarea class="form-control" name="notes" rows="2" maxlength="2000"></textarea></div>
+              <button class="btn btn-primary w-100" type="submit" id="saveInfoBtn" data-can="gateway.manage">Kaydet</button>
+            </form>
+            <hr class="my-3">
+            <dl class="row mb-0" id="info"></dl>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-header"><h3 class="card-title">Canlı Durum</h3></div>
+          <div class="card-body"><dl class="row mb-0" id="telemetry"></dl></div>
+        </div>
+      </div>
+      <div class="col-lg-8">
+        <div class="card mb-3">
+          <div class="card-header"><h3 class="card-title"><i class="ti ti-tags me-2 text-secondary"></i>Bağlı Cihazlar <span class="badge bg-secondary-lt ms-2" id="devCount">0</span></h3>
+            <div class="card-actions"><a class="btn btn-sm" id="allDevicesLink">Cihazlar sayfasında aç</a></div></div>
+          <div class="table-responsive" style="max-height:360px">
+            <table class="table table-vcenter card-table table-sm">
+              <thead><tr><th>Seri No</th><th>İsim</th><th>Durum</th><th>Son güncelleme</th></tr></thead>
+              <tbody id="devBody"></tbody>
+            </table>
+          </div>
+        </div>
+        <div class="row row-cards">
+          <div class="col-md-6">
+            <div class="card">
+              <div class="card-header"><h3 class="card-title"><i class="ti ti-plug-connected me-2 text-secondary"></i>Bağlantı Geçmişi</h3></div>
+              <div class="list-group list-group-flush overflow-auto" style="max-height:360px" id="events"></div>
+            </div>
+          </div>
+          <div class="col-md-6">
+            <div class="card">
+              <div class="card-header"><h3 class="card-title"><i class="ti ti-history me-2 text-secondary"></i>İşlem Kayıtları</h3></div>
+              <div class="list-group list-group-flush overflow-auto" style="max-height:360px" id="audit"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div></div>
+</div></div>
+<script src="/vendor/tabler/js/tabler.min.js"></script>
+<script src="/static/app.js"></script>
+<script>
+var e = App.escapeHtml, $ = function(id){ return document.getElementById(id); };
+var gwId = decodeURIComponent(location.pathname.split('/')[2] || '');
+var gw = null, formDirty = false;
+function dt(label, value){ return '<dt class="col-5 text-secondary fw-normal">' + label + '</dt><dd class="col-7">' + value + '</dd>'; }
+var EVENT_UI = {connected: ['ti-plug-connected', 'text-success', 'Bağlandı'], disconnected: ['ti-plug-connected-x', 'text-secondary', 'Bağlantı koptu'], rejected: ['ti-shield-x', 'text-danger', 'Reddedildi']};
+
+function load(){
+  return App.apiRequest('GET', '/api/gateways/' + encodeURIComponent(gwId)).then(function(g){
+    gw = g;
+    $('title').textContent = g.name;
+    $('statusBadge').innerHTML = App.statusBadge(g.status, g.statusLabel);
+    if (!formDirty) App.fillForm($('infoForm'), {name: g.name, location: g.location, notes: g.notes});
+    $('info').innerHTML = dt('Kimlik (MAC)', '<span class="mono">' + e(g.id) + '</span>') +
+      dt('Bayi', g.dealerName ? e(g.dealerName) : '<span class="badge bg-yellow-lt">atanmadı</span>') + dt('Şube', e(g.branchName || '-')) +
+      (g.claimCode && g.state === 'registered' ? dt('Sahiplenme kodu', '<span class="mono">' + e(g.claimCode) + '</span>') : '') +
+      dt('Anahtar', g.hasKey ? '<span class="text-success">kayıtlı</span>' : '<span class="text-warning">ilk bağlantıda kaydedilecek</span>') +
+      dt('Aktif olma', App.formatDate(g.activatedAt)) + dt('Kayıt', App.formatDate(g.createdAt));
+    $('telemetry').innerHTML = dt('Bağlantı', g.online ? '<span class="text-success">Çevrimiçi</span><div class="small text-secondary">bağlandı: ' + App.formatDate(g.connectedAt) + '</div>' : '<span class="text-secondary">Çevrimdışı</span><div class="small text-secondary">son görülme: ' + App.formatRelative(g.lastSeen) + '</div>') +
+      dt('WiFi', g.wifiSsid ? e(g.wifiSsid) + (g.wifiRssi != null ? ' · ' + g.wifiRssi + ' dBm' : '') : '-') +
+      dt('nRF24', g.nrf === null ? '-' : g.nrf ? '<span class="text-success">Hazır</span>' : '<span class="text-danger">Hazır değil</span>') +
+      dt('Çalışma süresi', g.online ? App.formatDuration(g.uptime) : '-') + dt('Boş bellek', g.freeHeap ? Math.round(g.freeHeap / 1024) + ' KB' : '-') +
+      dt('Firmware', '<span class="mono">' + e(g.fw || '-') + '</span>') + dt('IP', '<span class="mono">' + e(g.ip || '-') + '</span>') +
+      (g.lastError ? dt('Hata', '<span class="text-danger">' + e(g.lastError) + '</span>') : '') +
+      dt('Son mesaj', App.formatRelative(g.lastMessage));
+    $('restartBtn').hidden = !(g.online && currentUser.can['gateway.manage']);
+    $('labelBtn').hidden = !(g.state === 'registered' && currentUser.can['gateway.register']);
+    $('labelBtn').href = '/gateways/' + encodeURIComponent(g.id) + '/label';
+    $('allDevicesLink').href = '/devices?gatewayId=' + encodeURIComponent(g.id);
+    $('events').innerHTML = g.events.length ? g.events.map(function(ev){
+      var u = EVENT_UI[ev.event] || ['ti-point', '', ev.event];
+      return '<div class="list-group-item py-2"><div class="d-flex gap-2"><i class="ti ' + u[0] + ' ' + u[1] + ' fs-2"></i><div class="min-w-0"><div>' + u[2] + (ev.detail ? ' <span class="small text-secondary">' + e(ev.detail) + '</span>' : '') + '</div>' +
+        '<div class="small text-secondary">' + App.formatDate(ev.created_at) + (ev.ip ? ' · ' + e(ev.ip) : '') + '</div></div></div></div>';
+    }).join('') : '<div class="list-group-item text-secondary">Kayıt yok.</div>';
+  }).catch(function(err){ $('title').textContent = gwId; App.toast(err.message, 'danger'); });
+}
+function loadDevices(){
+  App.apiRequest('GET', '/api/devices?limit=2000&gatewayId=' + encodeURIComponent(gwId)).then(function(r){
+    $('devCount').textContent = r.total;
+    $('devBody').innerHTML = r.devices.length ? r.devices.map(function(d){
+      return '<tr><td><a class="mono" href="/devices/' + e(d.serial) + '">' + e(d.serial) + '</a></td><td>' + e(d.name || '') + '</td>' +
+        '<td>' + (d.state === 'active' ? '<span class="badge bg-green-lt">Aktif</span>' : '<span class="badge bg-secondary-lt">Devre Dışı</span>') + '</td>' +
+        '<td>' + (d.lastUpdateAt ? '<span class="' + (d.lastUpdateOk ? 'text-success' : 'text-danger') + '">' + (d.lastUpdateOk ? 'Başarılı' : 'Hata') + '</span> · ' + App.formatRelative(d.lastUpdateAt) : '-') + '</td></tr>';
+    }).join('') : App.emptyRow(4, 'Bu gateway\'e bağlı cihaz yok', 'ti-tags');
+  });
+}
+function loadAudit(){
+  App.apiRequest('GET', '/api/audit?limit=50&entityType=gateway&entityId=' + encodeURIComponent(gwId)).then(function(list){
+    $('audit').innerHTML = list.length ? list.map(function(a){
+      return '<div class="list-group-item py-2"><div class="d-flex justify-content-between"><strong class="' + (a.success ? '' : 'text-danger') + '">' + e(App.AUDIT_LABELS[a.action] || a.action) + '</strong><span class="small text-secondary">' + App.formatRelative(a.created_at) + '</span></div>' +
+        '<div class="small text-secondary">' + e(a.username || 'sistem') + (a.message ? ' · ' + e(a.message) : '') + '</div></div>';
+    }).join('') : '<div class="list-group-item text-secondary">Kayıt yok.</div>';
+  });
+}
+$('infoForm').addEventListener('input', function(){ formDirty = true; });
+$('infoForm').addEventListener('submit', function(ev){
+  ev.preventDefault();
+  App.apiRequest('POST', '/api/gateways/' + encodeURIComponent(gwId) + '/info', App.formData(ev.target)).then(function(){ formDirty = false; App.toast('Kaydedildi.'); load(); loadAudit(); })
+    .catch(function(err){ App.toast(err.message, 'danger'); });
+});
+$('restartBtn').addEventListener('click', function(){
+  App.confirm('Gateway yeniden başlatılsın mı?').then(function(ok){
+    if (ok) App.apiRequest('POST', '/api/gateways/' + encodeURIComponent(gwId) + '/command', {command: 'restart'}).then(function(){ App.toast('Yeniden başlatma komutu gönderildi.'); }).catch(function(err){ App.toast(err.message, 'danger'); });
+  });
+});
+$('moveBtn').addEventListener('click', function(){
+  if (!gw) return;
+  App.apiRequest('GET', '/api/gateways?dealerId=' + (gw.dealerId || 0)).then(function(list){
+    var others = list.filter(function(x){ return x.id !== gw.id && x.dealerId === gw.dealerId; });
+    if (!others.length){ App.toast('Aynı bayide taşınabilecek başka gateway yok.', 'warning'); return; }
+    App.dialog({
+      title: 'Cihazları başka gateway\'e taşı', okText: 'Taşı',
+      html: '<p class="text-secondary">Bu gateway\'e bağlı tüm cihazlar seçilen gateway\'e taşınır (arıza / değişim için).</p><label class="form-label">Hedef gateway</label><select class="form-select">' +
+        others.map(function(x){ return '<option value="' + e(x.id) + '">' + (x.online ? '● ' : '○ ') + e(x.name) + ' (' + e(x.id.slice(-6)) + ')</option>'; }).join('') + '</select>',
+      onOk: function(body){ return body.querySelector('select').value; }
+    }).then(function(target){
+      if (!target) return;
+      App.apiRequest('POST', '/api/gateways/' + encodeURIComponent(gwId) + '/move-devices', {targetGatewayId: target}).then(function(r){ App.toast(r.moved + ' cihaz taşındı.'); load(); loadDevices(); loadAudit(); })
+        .catch(function(err){ App.toast(err.message, 'danger'); });
+    });
+  });
+});
+App.meReady.then(function(me){
+  if (!me.can['gateway.manage']) Array.prototype.forEach.call($('infoForm').elements, function(el){ el.disabled = true; });
+  load(); loadDevices(); loadAudit();
+});
+setInterval(load, 10000);
+</script>
+</body>
+</html>

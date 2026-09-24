@@ -11,16 +11,33 @@ Tarayıcı ──HTTPS──> Sunucu (Coolify) ──wss──> ESP32 Gateway �
 
 ## Kavramlar
 
-- **Bayi:** Sistemin kiracısıdır. Her gateway ve kullanıcı bir bayiye aittir.
-- **Şube:** Opsiyoneldir. Şube kullanmayan bayi doğrudan bayi seviyesinde çalışır.
+- **Bayi:** Sistemin kiracısıdır. Her gateway, cihaz ve kullanıcı bir bayiye aittir. Şu
+  bilgileri tutar:
+  - Kurum bilgileri: bayi kodu, ticari ünvan, vergi dairesi ve numarası.
+  - İletişim ve adres: yetkili kişi, telefon, e-posta, adres, il/ilçe.
+  - Lisans: gateway ve cihaz limiti, sözleşme bitiş tarihi.
+- **Şube:** Opsiyoneldir. Şube kullanmayan bayi doğrudan bayi seviyesinde çalışır. Şube de
+  kod, yetkili, iletişim ve adres bilgisi tutar.
+- **Kullanıcı:** Giriş e-posta ile yapılır. E-postayı ve şifreyi hesabı açan yönetici
+  belirler; isterse şifreyi sisteme ürettirir. "İlk girişte şifresini değiştirsin"
+  seçilirse kullanıcı ilk girişte yeni şifre belirlemeden panele giremez.
 - **Roller:**
 
-  | Rol | Yetki |
-  |---|---|
-  | Merkezi Yönetici | Her şey |
-  | Bayi Yöneticisi | Kendi bayisi, şubeleri, gateway'leri ve kullanıcıları |
-  | Şube Yöneticisi | Sadece kendi şubesi |
-  | Operatör | Etiket gönderir ve geçmişi görür, ayarlara erişemez |
+  | Rol | Kapsam | Yetki |
+  |---|---|---|
+  | Merkezi Yönetici | Tüm sistem | Her şey: bayiler, gateway kaydı, seri no havuzu, ayarlar |
+  | Merkez Destek | Tüm sistem | Her şeyi görür, değişiklik yapamaz |
+  | Bayi Yöneticisi | Bayi + tüm şubeleri | Şube, kullanıcı, gateway ve cihaz yönetimi |
+  | Şube Yöneticisi | Tek şube | Şubesinin kullanıcı, gateway ve cihazları |
+  | Operatör | Bayi veya tek şube | Etiket gönderir, geçmişi görür |
+
+  Yöneticiler sadece kendi rollerine eşit veya daha düşük rolleri atayabilir. Panelde
+  **Kullanıcılar → Roller ve Yetkiler** tablosu yetkilerin tamamını gösterir.
+- **Güvenlik:**
+  - Şifre en az 8 karakter olmalı ve harf ile rakam içermeli; uzunluk ayarlardan değişir.
+  - Art arda 5 hatalı girişte hesap 15 dakika kilitlenir; yönetici kilidi açabilir.
+  - Kullanıcı ya da bayi pasif yapılınca açık oturumları anında kapanır.
+  - Oturumlar Profil sayfasından görülüp kapatılabilir.
 
 - **Gateway durumları:**
 
@@ -50,7 +67,8 @@ Tarayıcı ──HTTPS──> Sunucu (Coolify) ──wss──> ESP32 Gateway �
    | Değişken | Açıklama |
    |---|---|
    | `DATABASE_URL` | 1. adımda kopyalanan internal URL (zorunlu) |
-   | `ADMIN_PASSWORD` | İlk merkezi yönetici şifresi, kullanıcı adı `admin`. Sadece veritabanında hiç kullanıcı yokken kullanılır. |
+   | `ADMIN_EMAIL` | İlk merkezi yöneticinin e-postası. Verilmezse `admin` kullanıcı adıyla girilir. |
+   | `ADMIN_PASSWORD` | İlk merkezi yönetici şifresi. `ADMIN_EMAIL` ile birlikte sadece veritabanında hiç kullanıcı yokken kullanılır. |
    | `PUBLIC_URL` | İsteğe bağlı. QR kodlarındaki adres, örneğin `https://etiket.<sunucu-ip>.sslip.io`. Verilmezse isteğin geldiği adres kullanılır. |
 
 4. **Persistent Storage:** `/app/data` volume'unu koruyun. Önceki sürümden kalan
@@ -62,6 +80,27 @@ Tarayıcı ──HTTPS──> Sunucu (Coolify) ──wss──> ESP32 Gateway �
 Veritabanı şeması `src/db/migrations/` altındaki SQL dosyalarıyla yönetilir. Sunucu her
 açılışta uygulanmamış migration'ları sırayla çalıştırır. Yeni fazlar yeni dosya olarak
 eklenir, mevcut dosyalar değiştirilmez.
+
+## Yeni bayi açma
+
+1. **Bayiler → Yeni Bayi** penceresinde bayinin kurum, iletişim, adres ve lisans bilgilerini
+   girin.
+2. Aynı pencerede **İlk Bayi Yöneticisi**'nin ad soyad, e-posta ve şifresini belirleyin.
+   Şifreyi **Üret** ile sisteme de ürettirebilirsiniz.
+3. Kaydedince giriş bilgileri bir kez gösterilir. Bunları bayiye iletin.
+4. Bayi yöneticisi kendi panelinden şube açar ve şubelere kullanıcı ekler. Merkez de
+   **Bayiler → bayi detayı → Şubeler / Kullanıcılar** sekmelerinden aynı işlemleri yapabilir.
+
+## Seri no havuzu
+
+Merkez, üretilen cihazların seri numaralarını **Seri No Havuzu** sayfasından yükler. Yükleme
+aralık olarak (örnek 80156700–80156799) ya da liste veya Excel olarak yapılabilir. Numaralar
+bir bayiye önceden tahsis edilebilir.
+
+- Başka bayiye tahsisli bir numara, hiçbir bayi tarafından cihaz olarak eklenemez.
+- **Sistem Ayarları → Seri no havuzu zorunlu** açılırsa bayiler yalnızca havuzdaki
+  numaraları ekleyebilir. Yanlış yazılmış numaralar böylece sisteme giremez.
+- Eklenen cihazın havuz kaydı otomatik olarak o bayiye tahsis edilir.
 
 ## Gateway'i sisteme ekleme
 
@@ -115,6 +154,7 @@ Gateway'in yereldeki sunucuya bağlanması için kurulum sayfasındaki sunucu ad
 |---|---|---|
 | 1 | PostgreSQL, bayi/şube, roller, gateway yaşam döngüsü, QR sahiplenme, telemetri, işlem logu, özet | ✅ |
 | 2 | E-paper cihaz kaydı (8 haneli seri no, barkod/QR, Excel toplu ekleme), ekran modelleri, `serial` protokolü | ✅ |
+| 2.5 | E-posta ile giriş, bayi açılış sihirbazı, kurum/adres bilgileri, lisans limitleri, zorunlu şifre değişimi, hesap kilidi, merkez destek rolü, profil/oturumlar, seri no havuzu, gateway ve cihaz detay sayfaları, cihaz taşıma, yeni arayüz (Tabler, koyu tema) | ✅ |
 | 3 | Kalıcı güncelleme kuyruğu (offline bekletme, tekrar deneme, toplu güncelleme, durum adımları) | |
 | 4 | Ürün/içerik yönetimi ve cihaz ↔ ürün eşleştirme | |
 | 5 | Şablon motoru, dinamik alanlar, sunucuda bitmap üretimi | |

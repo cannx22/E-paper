@@ -7,6 +7,8 @@ const { Pool, types } = require('pg');
 
 // BIGINT (id'ler) JS number olarak gelsin - 2^53'e kadar guvenli.
 types.setTypeParser(20, (v) => parseInt(v, 10));
+// DATE ('2026-12-31') saat dilimi kaymasi olmasin diye metin olarak kalsin.
+types.setTypeParser(1082, (v) => v);
 
 const MIGRATIONS_DIR = path.join(__dirname, 'migrations');
 

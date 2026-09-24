@@ -1,167 +1,147 @@
-<!DOCTYPE html><html lang="tr"><head><meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Kullan&#305;c&#305; Y&ouml;netimi</title>
-<link rel="stylesheet" href="/static/admin.css">
-</head><body>
-<div class="banner">
-  <span class="tag">&#128101;</span>
-  <div>
-    <h1>Kullan&#305;c&#305; Y&ouml;netimi</h1>
-    <p>Kullan&#305;c&#305;lar yaln&#305;zca kendi bayi/&#351;ube kapsamlar&#305;ndaki kaynaklar&#305; g&ouml;r&uuml;r.</p>
-  </div>
-  <nav id="nav" class="nav-links"></nav>
-</div>
-<div class="wrap" style="max-width:1100px;">
-  <section class="card">
-    <h2>Kullan&#305;c&#305;lar</h2>
-    <div class="table-scroll">
-      <table>
-        <thead><tr><th>Kullan&#305;c&#305;</th><th>Rol</th><th>Bayi / &#350;ube</th><th>Durum</th><th>Son Giri&#351;</th><th></th></tr></thead>
-        <tbody id="userBody"><tr><td colspan="6">Y&uuml;kleniyor...</td></tr></tbody>
-      </table>
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Kullanıcılar</title>
+<script src="/static/theme-boot.js"></script>
+<link rel="stylesheet" href="/vendor/tabler/css/tabler.min.css">
+<link rel="stylesheet" href="/vendor/tabler-icons/tabler-icons.min.css">
+<link rel="stylesheet" href="/static/app.css">
+</head>
+<body>
+<div class="page">
+<div id="app-sidebar"></div>
+<div class="page-wrapper">
+  <div class="page-header d-print-none"><div class="container-xl"><div class="row g-2 align-items-center">
+    <div class="col"><div class="page-pretitle">Giriş e-posta ile yapılır; kullanıcılar yalnızca kendi bayi/şube kapsamını görür</div><h2 class="page-title"><i class="ti ti-users me-2"></i>Kullanıcılar</h2></div>
+    <div class="col-auto ms-auto"><div class="btn-list">
+      <button class="btn" data-bs-toggle="collapse" data-bs-target="#rolesCard"><i class="ti ti-shield me-1"></i>Roller ve Yetkiler</button>
+      <button class="btn btn-primary" id="newBtn" data-can="user.manage"><i class="ti ti-user-plus me-1"></i>Yeni Kullanıcı</button>
+    </div></div>
+  </div></div></div>
+  <div class="page-body"><div class="container-xl">
+    <div class="collapse mb-3" id="rolesCard">
+      <div class="card"><div class="card-header"><h3 class="card-title">Roller ve Yetkiler</h3></div>
+        <div class="table-responsive"><table class="table table-vcenter card-table table-sm" id="rolesTable"></table></div>
+      </div>
     </div>
-    <div id="userMsg" class="msg"></div>
-  </section>
-
-  <section class="card">
-    <h2>Yeni Kullan&#305;c&#305;</h2>
-    <form id="addForm">
-      <div class="row">
-        <div><label for="newUsername">Kullan&#305;c&#305; Ad&#305; / E-posta</label><input type="text" id="newUsername" required></div>
-        <div><label for="newPassword">&#350;ifre (en az 6 karakter)</label><input type="password" id="newPassword" required autocomplete="new-password"></div>
-        <div><label for="newRole">Rol</label><select id="newRole"></select></div>
+    <div class="card">
+      <div class="card-body border-bottom py-3">
+        <div class="row g-2">
+          <div class="col-md-4"><div class="input-icon"><span class="input-icon-addon"><i class="ti ti-search"></i></span><input class="form-control" id="fSearch" placeholder="Ad, e-posta, telefon"></div></div>
+          <div class="col-md"><select class="form-select" id="fRole"></select></div>
+          <div class="col-md" id="fDealerWrap" hidden><select class="form-select" id="fDealer"></select></div>
+          <div class="col-md" id="fBranchWrap"><select class="form-select" id="fBranch"></select></div>
+          <div class="col-md-auto d-flex align-items-center"><span class="small text-secondary" id="countInfo"></span></div>
+        </div>
       </div>
-      <div class="row">
-        <div id="dealerWrap"><label for="newDealer">Bayi</label><select id="newDealer"></select></div>
-        <div id="branchWrap"><label for="newBranch">&#350;ube</label><select id="newBranch"></select></div>
+      <div class="table-responsive">
+        <table class="table table-vcenter card-table table-hover">
+          <thead><tr><th>Kullanıcı</th><th>Rol</th><th>Bayi / Şube</th><th>Durum</th><th>Son giriş</th><th>Ekleyen</th><th class="w-1"></th></tr></thead>
+          <tbody id="body"><tr><td colspan="7" class="text-secondary">Yükleniyor...</td></tr></tbody>
+        </table>
       </div>
-      <p class="small" id="roleHint"></p>
-      <button type="submit" class="btn-primary">Kullan&#305;c&#305; Ekle</button>
-    </form>
-    <div id="addMsg" class="msg"></div>
-  </section>
-
-  <section class="card">
-    <h2>Kendi &#350;ifremi De&#287;i&#351;tir</h2>
-    <form id="pwForm">
-      <div class="row">
-        <div><label for="curPw">Mevcut &#350;ifre</label><input type="password" id="curPw" required autocomplete="current-password"></div>
-        <div><label for="newPw">Yeni &#350;ifre</label><input type="password" id="newPw" required autocomplete="new-password"></div>
-      </div>
-      <button type="submit" class="btn-primary">&#350;ifreyi De&#287;i&#351;tir</button>
-    </form>
-    <div id="pwMsg" class="msg"></div>
-  </section>
-</div>
-
-<script src="/static/common.js"></script>
+    </div>
+  </div></div>
+</div></div>
+<script src="/vendor/tabler/js/tabler.min.js"></script>
+<script src="/static/app.js"></script>
+<script src="/static/org-forms.js"></script>
 <script>
-var ROLE_INFO = {
-  super_admin: {label: 'Merkezi Yönetici', level: 4, hint: 'Tüm bayileri, gateway\'leri ve kullanıcıları yönetir.'},
-  dealer_admin: {label: 'Bayi Yöneticisi', level: 3, hint: 'Kendi bayisini, şubelerini, gateway\'lerini ve kullanıcılarını yönetir.'},
-  branch_admin: {label: 'Şube Yöneticisi', level: 2, hint: 'Sadece kendi şubesindeki gateway\'leri ve kullanıcıları yönetir.'},
-  operator: {label: 'Operatör', level: 1, hint: 'Etiket gönderir ve geçmişi görür; ayarlara erişemez. Şube seçilirse sadece o şubeyi görür.'}
+var e = App.escapeHtml, $ = function(id){ return document.getElementById(id); };
+var users = [], dealers = [], branches = [], isCentral = false;
+var ACTION_LABELS = {
+  'label.send': 'Etiket gönderme', 'gateway.view': 'Gateway görüntüleme', 'gateway.manage': 'Gateway ayarları / komut', 'gateway.claim': 'Gateway sahiplenme (QR)',
+  'gateway.assign': 'Gateway şube atama / cihaz taşıma', 'gateway.disable': 'Gateway devre dışı', 'gateway.register': 'Gateway kayıt / bayiye atama',
+  'device.view': 'Cihaz görüntüleme', 'device.manage': 'Cihaz ekleme / düzenleme', 'inventory.manage': 'Seri no havuzu', 'dealer.view': 'Bayileri görüntüleme',
+  'dealer.manage': 'Bayi yönetimi', 'branch.view': 'Şubeleri görüntüleme', 'branch.manage': 'Şube yönetimi', 'user.view': 'Kullanıcıları görüntüleme',
+  'user.manage': 'Kullanıcı yönetimi', 'audit.view': 'İşlem geçmişi', 'settings.manage': 'Sistem ayarları'
 };
-var users = [], dealers = [], branches = [];
 
-function refresh(){
-  return apiRequest('GET', '/api/users').then(function(list){
-    users = list;
-    document.getElementById('userBody').innerHTML = list.map(function(u){
-      var scope = u.dealer_name ? escapeHtml(u.dealer_name) + (u.branch_name ? '<br><span class="small">' + escapeHtml(u.branch_name) + '</span>' : '') : '<span class="small">merkez</span>';
-      var self = u.id === currentUser.id;
-      var actions = self ? '<span class="small">(siz)</span>' :
-        '<button class="btn-sm" data-act="password" data-id="' + u.id + '">&#350;ifre S&#305;f&#305;rla</button>' +
-        '<button class="btn-sm" data-act="toggle" data-id="' + u.id + '">' + (u.active ? 'Pasif Yap' : 'Aktif Yap') + '</button>' +
-        '<button class="btn-sm danger" data-act="delete" data-id="' + u.id + '">Sil</button>';
-      return '<tr><td><b>' + escapeHtml(u.username) + '</b></td>' +
-        '<td class="' + (u.role === 'super_admin' || u.role === 'dealer_admin' ? 'role-admin' : 'role-user') + '">' + escapeHtml(u.role_label) + '</td>' +
-        '<td>' + scope + '</td>' +
-        '<td>' + (u.active ? '<span class="badge online">Aktif</span>' : '<span class="badge inactive">Pasif</span>') + '</td>' +
-        '<td>' + formatDate(u.last_login_at) + '</td>' +
-        '<td><div class="actions">' + actions + '</div></td></tr>';
-    }).join('');
-  }).catch(function(err){ showMsg('userMsg', false, err.message); });
+function statusCell(u){
+  var s = App.activeBadge(u.active);
+  if (u.locked) s += ' <span class="badge bg-red-lt" title="Hatalı denemeler nedeniyle kilitli"><i class="ti ti-lock me-1"></i>kilitli</span>';
+  if (u.must_change_password) s += ' <span class="badge bg-yellow-lt" title="İlk girişte şifre değiştirecek">şifre değişecek</span>';
+  return s;
+}
+function menu(u){
+  if (!currentUser.can['user.manage'] || u.id === currentUser.id) return u.id === currentUser.id ? '<a class="btn btn-sm" href="/profile">Profilim</a>' : '';
+  function it(act, icon, text, cls){ return '<a class="dropdown-item ' + (cls || '') + '" href="#" data-act="' + act + '" data-id="' + u.id + '"><i class="ti ' + icon + ' me-2"></i>' + text + '</a>'; }
+  return '<div class="dropdown"><button class="btn btn-sm btn-icon" data-bs-toggle="dropdown"><i class="ti ti-dots-vertical"></i></button><div class="dropdown-menu dropdown-menu-end">' +
+    it('edit', 'ti-pencil', 'Düzenle') + it('password', 'ti-key', 'Şifre Sıfırla') + (u.locked ? it('unlock', 'ti-lock-open', 'Kilidi Aç') : '') +
+    (u.session_count ? it('sessions', 'ti-logout', 'Oturumları Kapat (' + u.session_count + ')') : '') +
+    it('toggle', u.active ? 'ti-user-off' : 'ti-user-check', u.active ? 'Pasif Yap' : 'Aktif Yap') +
+    '<div class="dropdown-divider"></div>' + it('delete', 'ti-trash', 'Sil', 'text-danger') + '</div></div>';
+}
+function render(){
+  var q = $('fSearch').value.trim().toLocaleLowerCase('tr'), role = $('fRole').value, dealer = $('fDealer').value, branch = $('fBranch').value;
+  var list = users.filter(function(u){
+    if (role && u.role !== role) return false;
+    if (dealer && String(u.dealer_id) !== dealer) return false;
+    if (branch && String(u.branch_id) !== branch) return false;
+    return !q || [u.full_name, u.login, u.phone, u.title].some(function(v){ return v && v.toLocaleLowerCase('tr').indexOf(q) !== -1; });
+  });
+  $('countInfo').textContent = list.length + ' / ' + users.length + ' kullanıcı';
+  $('body').innerHTML = list.length ? list.map(function(u){
+    var initials = (u.full_name || u.login || '?').split(/[\s@.]+/).filter(Boolean).slice(0, 2).map(function(s){ return s[0].toUpperCase(); }).join('');
+    var scope = u.dealer_name ? '<a class="text-reset" href="/dealers/' + u.dealer_id + '">' + e(u.dealer_name) + '</a><div class="small text-secondary">' + e(u.branch_name || (u.role === 'branch_admin' ? '' : 'tüm şubeler')) + '</div>' : '<span class="text-secondary">Merkez</span>';
+    return '<tr><td><div class="d-flex align-items-center gap-2"><span class="avatar avatar-sm bg-blue-lt">' + e(initials) + '</span><div class="min-w-0"><div class="fw-bold">' + e(u.full_name || u.login) + '</div>' +
+      '<div class="small text-secondary text-truncate">' + e(u.login) + (u.title ? ' · ' + e(u.title) : '') + (u.phone ? ' · ' + e(u.phone) : '') + '</div></div></div></td>' +
+      '<td>' + App.roleBadge(u.role) + '</td><td>' + scope + '</td><td>' + statusCell(u) + '</td>' +
+      '<td title="' + e(App.formatDate(u.last_login_at)) + '">' + (u.last_login_at ? App.formatRelative(u.last_login_at) : '<span class="text-secondary">hiç</span>') + '</td>' +
+      '<td class="small text-secondary">' + e(u.created_by_name || u.created_by_email || '-') + '<div>' + App.formatDate(u.created_at) + '</div></td>' +
+      '<td>' + menu(u) + '</td></tr>';
+  }).join('') : App.emptyRow(7, users.length ? 'Filtreye uyan kullanıcı yok' : 'Kullanıcı yok', 'ti-users');
+}
+function refresh(){ return App.apiRequest('GET', '/api/users').then(function(list){ users = list; render(); }); }
+function ctx(){ return {dealers: dealers, branches: branches, dealerId: isCentral ? ($('fDealer').value ? parseInt($('fDealer').value, 10) : null) : null}; }
+
+$('newBtn').addEventListener('click', function(){
+  var c = ctx(); if (!c.dealerId) delete c.dealerId;
+  OrgForms.openUser(null, c).then(function(r){ if (r) refresh(); });
+});
+$('body').addEventListener('click', function(ev){
+  var a = ev.target.closest('[data-act]');
+  if (!a) return;
+  ev.preventDefault();
+  var u = users.filter(function(x){ return String(x.id) === a.dataset.id; })[0], base = '/api/users/' + u.id, act = a.dataset.act;
+  var name = u.full_name || u.login;
+  if (act === 'edit') return OrgForms.openUser(u, {dealers: dealers, branches: branches}).then(function(r){ if (r) refresh(); });
+  if (act === 'password') return OrgForms.resetPassword(u).then(refresh);
+  var req = {
+    unlock: [name + ' hesabının kilidi açılsın mı?', function(){ return App.apiRequest('POST', base + '/unlock', {}); }],
+    sessions: [name + ' kullanıcısının tüm oturumları kapatılsın mı?', function(){ return App.apiRequest('POST', base + '/revoke-sessions', {}); }],
+    toggle: [u.active ? name + ' pasif yapılsın mı? Açık oturumları kapanır ve giriş yapamaz.' : name + ' aktif yapılsın mı?', function(){ return App.apiRequest('POST', base + '/active', {active: !u.active}); }],
+    'delete': [name + ' kalıcı olarak silinsin mi? İşlem geçmişindeki kayıtları korunur.', function(){ return App.apiRequest('DELETE', base); }]
+  }[act];
+  App.confirm(req[0], {danger: act === 'delete' || (act === 'toggle' && u.active)}).then(function(ok){
+    if (ok) req[1]().then(function(){ App.toast('İşlem tamamlandı.'); refresh(); }).catch(function(err){ App.toast(err.message, 'danger'); });
+  });
+});
+['fSearch', 'fRole', 'fBranch'].forEach(function(id){ $(id).addEventListener(id === 'fSearch' ? 'input' : 'change', render); });
+$('fDealer').addEventListener('change', function(){ fillBranchFilter(); render(); });
+function fillBranchFilter(){
+  var d = $('fDealer').value;
+  App.fillSelect('fBranch', branches.filter(function(b){ return !d || String(b.dealer_id) === d; }).map(function(b){ return {id: b.id, name: (isCentral && !d ? b.dealer_name + ' / ' : '') + b.name}; }), 'Tüm şubeler');
 }
 
-// Rol secimine gore bayi/sube alanlarini goster/gizle ve doldur.
-function updateScopeFields(){
-  var me = currentUser, role = document.getElementById('newRole').value;
-  var isSuper = me.role === 'super_admin';
-  document.getElementById('roleHint').textContent = ROLE_INFO[role] ? ROLE_INFO[role].hint : '';
-  document.getElementById('dealerWrap').style.display = isSuper && role !== 'super_admin' ? 'block' : 'none';
-  var dealerId = isSuper ? document.getElementById('newDealer').value : me.dealerId;
-  var showBranch = (role === 'branch_admin' || role === 'operator') && !me.branchId;
-  document.getElementById('branchWrap').style.display = showBranch ? 'block' : 'none';
-  if (showBranch){
-    var list = branches.filter(function(b){ return String(b.dealer_id) === String(dealerId); });
-    var prev = document.getElementById('newBranch').value;
-    fillSelect(document.getElementById('newBranch'), list, role === 'branch_admin' ? 'Şube seçin' : '(tüm bayi)', prev);
-  }
-}
-document.getElementById('newRole').addEventListener('change', updateScopeFields);
-document.getElementById('newDealer').addEventListener('change', updateScopeFields);
-
-document.getElementById('userBody').addEventListener('click', function(e){
-  var btn = e.target.closest('button[data-act]');
-  if (!btn) return;
-  var u = users.filter(function(x){ return String(x.id) === btn.dataset.id; })[0];
-  var base = '/api/users/' + u.id, req;
-  if (btn.dataset.act === 'password'){
-    var pw = prompt(u.username + ' için yeni şifre (en az 6 karakter):');
-    if (!pw) return;
-    req = apiRequest('POST', base + '/password', {password: pw}).then(function(){
-      showMsg('userMsg', true, u.username + ' kullanıcısının şifresi değiştirildi.');
-    });
-  } else if (btn.dataset.act === 'toggle'){
-    req = apiRequest('POST', base + '/active', {active: !u.active}).then(function(){ hideMsg('userMsg'); });
-  } else {
-    if (!confirm(u.username + ' silinsin mi?')) return;
-    req = apiRequest('DELETE', base).then(function(){ hideMsg('userMsg'); });
-  }
-  req.then(refresh).catch(function(err){ showMsg('userMsg', false, err.message); });
-});
-
-document.getElementById('addForm').addEventListener('submit', function(e){
-  e.preventDefault();
-  apiRequest('POST', '/api/users', {
-    username: document.getElementById('newUsername').value,
-    password: document.getElementById('newPassword').value,
-    role: document.getElementById('newRole').value,
-    dealerId: document.getElementById('newDealer').value || null,
-    branchId: document.getElementById('branchWrap').style.display === 'none' ? null : (document.getElementById('newBranch').value || null)
-  }).then(function(){
-    showMsg('addMsg', true, 'Kullanıcı eklendi.');
-    document.getElementById('newUsername').value = '';
-    document.getElementById('newPassword').value = '';
-    refresh();
-  }).catch(function(err){ showMsg('addMsg', false, err.message); });
-});
-
-document.getElementById('pwForm').addEventListener('submit', function(e){
-  e.preventDefault();
-  apiRequest('POST', '/api/me/password', {
-    currentPassword: document.getElementById('curPw').value,
-    newPassword: document.getElementById('newPw').value
-  }).then(function(txt){
-    showMsg('pwMsg', true, txt);
-    setTimeout(function(){ location.href = '/login'; }, 1500);
-  }).catch(function(err){ showMsg('pwMsg', false, err.message); });
-});
-
-meReady.then(function(me){
-  var myLevel = ROLE_INFO[me.role].level;
-  var roles = Object.keys(ROLE_INFO).filter(function(r){
-    return me.role === 'super_admin' || ROLE_INFO[r].level <= myLevel;
-  }).filter(function(r){ return r !== 'super_admin' || me.role === 'super_admin'; })
-    .filter(function(r){ return !(me.branchId && r === 'dealer_admin'); });
-  fillSelect(document.getElementById('newRole'), roles.map(function(r){ return {id: r, name: ROLE_INFO[r].label}; }), null, 'operator');
-  return Promise.all([apiRequest('GET', '/api/dealers'), apiRequest('GET', '/api/branches')]).then(function(r){
+App.meReady.then(function(me){
+  isCentral = me.role === 'super_admin' || me.role === 'support';
+  App.fillSelect('fRole', Object.keys(App.ROLE_LABELS).map(function(r){ return {id: r, name: App.ROLE_LABELS[r]}; }), 'Tüm roller');
+  if (me.branchId) $('fBranchWrap').hidden = true;
+  App.apiRequest('GET', '/api/roles').then(function(roles){
+    var actions = Object.keys(ACTION_LABELS);
+    $('rolesTable').innerHTML = '<thead><tr><th>Yetki</th>' + roles.map(function(r){ return '<th class="text-center">' + App.roleBadge(r.id) + '</th>'; }).join('') + '</tr></thead><tbody>' +
+      '<tr><td class="text-secondary small">Açıklama</td>' + roles.map(function(r){ return '<td class="small text-secondary" style="min-width:150px">' + e(r.description) + '</td>'; }).join('') + '</tr>' +
+      actions.map(function(a){ return '<tr><td>' + e(ACTION_LABELS[a]) + '</td>' + roles.map(function(r){ return '<td class="text-center">' + (r.actions.indexOf(a) !== -1 ? '<i class="ti ti-check text-success"></i>' : '<i class="ti ti-minus text-secondary"></i>') + '</td>'; }).join('') + '</tr>'; }).join('') + '</tbody>';
+  });
+  return Promise.all([App.apiRequest('GET', '/api/dealers'), App.apiRequest('GET', '/api/branches')]).then(function(r){
     dealers = r[0]; branches = r[1];
-    fillSelect(document.getElementById('newDealer'), dealers, 'Bayi seçin');
-    updateScopeFields();
+    if (isCentral){ $('fDealerWrap').hidden = false; App.fillSelect('fDealer', dealers, 'Tüm bayiler', App.qs('dealerId')); }
+    fillBranchFilter();
     return refresh();
   });
 });
 </script>
-</body></html>
+</body>
+</html>

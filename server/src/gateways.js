@@ -66,6 +66,12 @@ function secretMatches(storedHash, secret) {
   return a.length === b.length && crypto.timingSafeEqual(a, b);
 }
 
+// Baglanti gecmisi (gateway detay sayfasinda gosterilir).
+function logEvent(gatewayId, event, ip, detail) {
+  db.query('INSERT INTO gateway_events (gateway_id, event, ip, detail) VALUES ($1, $2, $3, $4)', [gatewayId, event, ip || null, detail || null])
+    .catch(() => {});
+}
+
 function clientIp(req) {
   const fwd = req.headers['x-forwarded-for'];
   if (fwd) return String(fwd).split(',')[0].trim();
@@ -150,6 +156,7 @@ async function handleHello(ws, req, msg) {
     console.log(`[gw ${id}] anahtar kaydedildi`);
   } else if (!secretMatches(gw.secret_hash, secret)) {
     console.log(`[gw ${id}] REDDEDILDI: anahtar eslesmiyor (${ip})`);
+    logEvent(id, 'rejected', ip, 'anahtar eslesmiyor');
     ws.send(JSON.stringify({ type: 'error', error: 'bad_secret' }));
     ws.close(4001, 'bad secret');
     return null;
@@ -182,6 +189,7 @@ async function handleHello(ws, req, msg) {
   const conn = new Connection(ws, id, { ip, connectedAt: gw.connected_at });
   connections.set(id, conn);
   conn.sendJson({ type: 'hello_ack', status: gw.state, name: gw.name });
+  logEvent(id, 'connected', ip, `fw ${gw.fw_version}`);
   console.log(`[gw ${id}] baglandi (${ip}, fw ${gw.fw_version}, nrf ${gw.nrf_ok ? 'hazir' : 'YOK'}, ${gw.state})`);
   return conn;
 }
@@ -260,6 +268,7 @@ function attach(httpServer) {
       if (connections.get(conn.id) === conn) {
         connections.delete(conn.id);
         db.query('UPDATE gateways SET last_seen_at = now() WHERE id = $1', [conn.id]).catch(() => {});
+        logEvent(conn.id, 'disconnected', conn.info.ip);
         console.log(`[gw ${conn.id}] baglanti kapandi`);
       }
     });
@@ -287,6 +296,7 @@ function isOnline(id) { return connections.has(id); }
 // Etiketi gateway'e iletir. Kapsam/yetki kontrolu cagiran tarafta yapilir;
 // burada sadece gateway'in gonderime uygun durumda olup olmadigina bakilir.
 async function sendLabel(gw, serial, fields) {
+  if (gw.dealer_active === false) return { ok: false, status: 409, message: 'HATA: Gateway\'in bagli oldugu bayi pasif.' };
   if (gw.state === 'disabled') return { ok: false, status: 409, message: 'HATA: Gateway devre disi.' };
   if (gw.state !== 'active') return { ok: false, status: 409, message: 'HATA: Gateway henuz aktif degil.' };
   const conn = connections.get(gw.id);

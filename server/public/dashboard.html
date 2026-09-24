@@ -1,77 +1,117 @@
-<!DOCTYPE html><html lang="tr"><head><meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>&Ouml;zet</title>
-<link rel="stylesheet" href="/static/admin.css">
-</head><body>
-<div class="banner">
-  <span class="tag">&#128202;</span>
-  <div>
-    <h1>Genel Bak&#305;&#351;</h1>
-    <p id="scopeText">Kapsam&#305;n&#305;zdaki sistemin durumu. 15 saniyede bir yenilenir.</p>
-  </div>
-  <nav id="nav" class="nav-links"></nav>
-</div>
-<div class="wrap" style="max-width:1100px;">
-  <div class="stats" id="stats"></div>
-  <section class="card">
-    <h2>Gateway Durumlar&#305;</h2>
-    <div class="stats" id="gwStats" style="margin-bottom:0;"></div>
-  </section>
-  <section class="card">
-    <h2>Offline / Hatal&#305; Gateway'ler</h2>
-    <div class="table-scroll">
-      <table>
-        <thead><tr><th>Gateway</th><th>Durum</th><th>Bayi / &#350;ube</th><th>Son G&ouml;r&uuml;lme</th><th>Hata</th></tr></thead>
-        <tbody id="problemBody"><tr><td colspan="5">Y&uuml;kleniyor...</td></tr></tbody>
-      </table>
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Genel Bakış</title>
+<script src="/static/theme-boot.js"></script>
+<link rel="stylesheet" href="/vendor/tabler/css/tabler.min.css">
+<link rel="stylesheet" href="/vendor/tabler-icons/tabler-icons.min.css">
+<link rel="stylesheet" href="/static/app.css">
+</head>
+<body>
+<div class="page">
+<div id="app-sidebar"></div>
+<div class="page-wrapper">
+  <div class="page-header d-print-none"><div class="container-xl"><div class="row g-2 align-items-center">
+    <div class="col"><div class="page-pretitle" id="scopeText">Genel durum</div><h2 class="page-title"><i class="ti ti-layout-dashboard me-2"></i>Genel Bakış</h2></div>
+    <div class="col-auto ms-auto"><div class="btn-list">
+      <a href="/" class="btn btn-primary" data-can="label.send"><i class="ti ti-send me-1"></i>Etiket Gönder</a>
+      <a href="/devices" class="btn" data-can="device.manage"><i class="ti ti-plus me-1"></i>Cihaz Ekle</a>
+    </div></div>
+  </div></div></div>
+
+  <div class="page-body"><div class="container-xl">
+    <div class="row row-deck row-cards" id="stats"></div>
+
+    <div class="row row-cards mt-1">
+      <div class="col-lg-5">
+        <div class="card">
+          <div class="card-header"><h3 class="card-title"><i class="ti ti-router me-2 text-secondary"></i>Gateway Durumları</h3></div>
+          <div class="card-body">
+            <div class="progress progress-separated mb-3" style="height:.7rem" id="gwBar"></div>
+            <div class="row g-2" id="gwStats"></div>
+          </div>
+        </div>
+      </div>
+      <div class="col-lg-7">
+        <div class="card">
+          <div class="card-header"><h3 class="card-title"><i class="ti ti-alert-triangle me-2 text-warning"></i>Offline / Hatalı Gateway'ler</h3>
+            <div class="card-actions"><a href="/gateways" class="btn btn-sm">Tümü</a></div></div>
+          <div class="table-responsive">
+            <table class="table table-vcenter card-table">
+              <thead><tr><th>Gateway</th><th>Durum</th><th>Bayi / Şube</th><th>Son görülme</th></tr></thead>
+              <tbody id="problemBody"><tr><td colspan="4" class="text-secondary">Yükleniyor...</td></tr></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
     </div>
-  </section>
-  <section class="card">
-    <h2>Son Ba&#351;ar&#305;s&#305;z &#304;&#351;lemler</h2>
-    <div class="table-scroll">
-      <table>
-        <thead><tr><th>Zaman</th><th>Kullan&#305;c&#305;</th><th>&#304;&#351;lem</th><th>Kaynak</th><th>Mesaj</th></tr></thead>
-        <tbody id="failBody"><tr><td colspan="5">Y&uuml;kleniyor...</td></tr></tbody>
-      </table>
+
+    <div class="card mt-3">
+      <div class="card-header"><h3 class="card-title"><i class="ti ti-circle-x me-2 text-danger"></i>Son Başarısız İşlemler</h3>
+        <div class="card-actions"><a href="/history?type=failed" class="btn btn-sm">Tümü</a></div></div>
+      <div class="table-responsive">
+        <table class="table table-vcenter card-table">
+          <thead><tr><th>Zaman</th><th>Kullanıcı</th><th>İşlem</th><th>Kaynak</th><th>Mesaj</th></tr></thead>
+          <tbody id="failBody"><tr><td colspan="5" class="text-secondary">Yükleniyor...</td></tr></tbody>
+        </table>
+      </div>
     </div>
-  </section>
-</div>
-<script src="/static/common.js"></script>
-<script src="/static/audit-labels.js"></script>
+  </div></div>
+</div></div>
+<script src="/vendor/tabler/js/tabler.min.js"></script>
+<script src="/static/app.js"></script>
 <script>
-function stat(v, l){ return '<div class="stat"><div class="v">' + v + '</div><div class="l">' + l + '</div></div>'; }
+var e = App.escapeHtml;
+function stat(value, label, icon, color, href, sub){
+  return '<div class="col-6 col-md-4 col-xl-2"><a class="card card-sm stat-card card-link text-reset" href="' + href + '"><div class="card-body"><div class="d-flex align-items-center gap-3">' +
+    '<span class="avatar bg-' + color + '-lt flex-shrink-0"><i class="ti ' + icon + ' fs-2"></i></span><div class="min-w-0">' +
+    '<div class="stat-value">' + value + '</div><div class="stat-label">' + label + '</div>' +
+    (sub ? '<div class="small text-secondary lh-sm">' + sub + '</div>' : '') + '</div></div></div></a></div>';
+}
+var ORDER = ['active', 'offline', 'error', 'awaiting', 'registered', 'pending', 'disabled'];
+var COLORS = {active:'green', offline:'secondary', error:'red', awaiting:'azure', registered:'indigo', pending:'yellow', disabled:'dark'};
 
 function refresh(){
-  apiRequest('GET', '/api/dashboard').then(function(d){
-    var c = d.counts, html = '';
-    if (c.dealers !== undefined) html += stat(c.dealers, 'Bayi');
-    html += stat(c.branches, '&#350;ube') + stat(c.gateways, 'Gateway') + stat(c.devices, 'E-Paper Cihaz') + stat(c.users, 'Kullan&#305;c&#305;');
-    html += stat(c.devicesUnassigned, 'Gateway\'siz cihaz') + stat(c.devicesLastFailed, 'Son g&uuml;ncellemesi hatal&#305;');
-    html += stat(d.sends24h.ok, 'Ba&#351;ar&#305;l&#305; g&ouml;nderim (24s)') + stat(d.sends24h.failed, 'Ba&#351;ar&#305;s&#305;z g&ouml;nderim (24s)');
+  App.apiRequest('GET', '/api/dashboard').then(function(d){
+    var c = d.counts, s = d.gatewaysByStatus, html = '';
+    if (c.dealers !== undefined) html += stat(c.dealers, 'Bayi', 'ti-building-store', 'purple', '/dealers', c.dealersActive + ' aktif');
+    html += stat(c.branches, 'Şube', 'ti-building', 'blue', currentUser.can['branch.view'] ? '/branches' : '#');
+    html += stat(c.gateways, 'Gateway', 'ti-router', 'cyan', '/gateways', s.active + ' aktif, ' + (s.offline + s.error) + ' sorunlu');
+    html += stat(c.devices, 'Cihaz', 'ti-tags', 'green', '/devices', c.devicesUnassigned + ' gateway\'siz');
+    html += stat(d.sends24h.ok, 'Başarılı', 'ti-circle-check', 'teal', '/history?type=labels', 'son 24 saat');
+    html += stat(d.sends24h.failed, 'Başarısız', 'ti-circle-x', d.sends24h.failed ? 'red' : 'secondary', '/history?type=failed', 'son 24 saat');
     document.getElementById('stats').innerHTML = html;
-    var order = ['active', 'offline', 'error', 'awaiting', 'registered', 'pending', 'disabled'];
-    document.getElementById('gwStats').innerHTML = order.map(function(s){
-      return '<div class="stat"><div class="v">' + d.gatewaysByStatus[s] + '</div><div class="l"><span class="badge st-' + s + '">' + escapeHtml(d.statusLabels[s]) + '</span></div></div>';
+
+    var total = ORDER.reduce(function(a, k){ return a + s[k]; }, 0) || 1;
+    document.getElementById('gwBar').innerHTML = ORDER.filter(function(k){ return s[k]; }).map(function(k){
+      return '<div class="progress-bar bg-' + COLORS[k] + '" style="width:' + (s[k] * 100 / total) + '%" title="' + e(d.statusLabels[k]) + ': ' + s[k] + '"></div>';
     }).join('');
+    document.getElementById('gwStats').innerHTML = ORDER.map(function(k){
+      return '<div class="col-6"><div class="d-flex align-items-center justify-content-between border rounded px-2 py-1">' +
+        App.statusBadge(k, d.statusLabels[k]) + '<strong>' + s[k] + '</strong></div></div>';
+    }).join('');
+
     document.getElementById('problemBody').innerHTML = d.problemGateways.length ? d.problemGateways.map(function(g){
-      return '<tr><td><b>' + escapeHtml(g.name) + '</b><br><span class="mono small">' + escapeHtml(g.id) + '</span></td>' +
-        '<td><span class="badge st-' + g.status + '">' + escapeHtml(g.statusLabel) + '</span></td>' +
-        '<td>' + escapeHtml(g.dealerName || '-') + (g.branchName ? ' / ' + escapeHtml(g.branchName) : '') + '</td>' +
-        '<td>' + formatDate(g.lastSeen) + '</td><td>' + escapeHtml(g.lastError || '') + '</td></tr>';
-    }).join('') : '<tr><td colspan="5">Sorunlu gateway yok. &#9989;</td></tr>';
+      return '<tr class="cursor-pointer" onclick="location.href=\'/gateways/' + e(g.id) + '\'"><td><div class="fw-medium">' + e(g.name) + '</div><div class="small text-secondary mono">' + e(g.id) + '</div></td>' +
+        '<td>' + App.statusBadge(g.status, g.statusLabel) + (g.lastError ? '<div class="small text-danger mt-1">' + e(g.lastError) + '</div>' : '') + '</td>' +
+        '<td>' + e(g.dealerName || '-') + (g.branchName ? '<div class="small text-secondary">' + e(g.branchName) + '</div>' : '') + '</td>' +
+        '<td title="' + e(App.formatDate(g.lastSeen)) + '">' + App.formatRelative(g.lastSeen) + '</td></tr>';
+    }).join('') : App.emptyRow(4, 'Sorunlu gateway yok', 'ti-mood-happy');
   });
-  apiRequest('GET', '/api/audit?type=failed&limit=10').then(function(list){
+  App.apiRequest('GET', '/api/audit?type=failed&limit=8').then(function(list){
     document.getElementById('failBody').innerHTML = list.length ? list.map(function(a){
-      return '<tr><td>' + formatDate(a.created_at) + '</td><td>' + escapeHtml(a.username || '-') + '</td>' +
-        '<td>' + escapeHtml(auditActionLabel(a.action)) + '</td><td>' + escapeHtml(a.gateway_name || a.entity_id || '-') + '</td>' +
-        '<td>' + escapeHtml(a.message || '') + '</td></tr>';
-    }).join('') : '<tr><td colspan="5">Ba&#351;ar&#305;s&#305;z i&#351;lem yok.</td></tr>';
+      return '<tr><td class="text-nowrap" title="' + e(App.formatDate(a.created_at)) + '">' + App.formatRelative(a.created_at) + '</td><td>' + e(a.username || '-') + '</td>' +
+        '<td>' + e(App.AUDIT_LABELS[a.action] || a.action) + '</td><td>' + e(a.gateway_name || a.device_name || a.entity_id || '-') + '</td>' +
+        '<td class="text-secondary">' + e((a.message || '').replace(/^HATA:\s*/, '')) + '</td></tr>';
+    }).join('') : App.emptyRow(5, 'Başarısız işlem yok', 'ti-circle-check');
   });
 }
-meReady.then(function(me){
-  if (me.dealerName) document.getElementById('scopeText').textContent = me.dealerName + (me.branchName ? ' / ' + me.branchName : '') + ' - 15 saniyede bir yenilenir.';
+App.meReady.then(function(me){
+  document.getElementById('scopeText').textContent = me.dealerName ? me.dealerName + (me.branchName ? ' / ' + me.branchName : '') : 'Tüm sistem';
   refresh();
 });
 setInterval(refresh, 15000);
 </script>
-</body></html>
+</body>
+</html>

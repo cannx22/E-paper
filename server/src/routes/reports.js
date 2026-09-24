@@ -3,7 +3,7 @@ const express = require('express');
 const db = require('../db');
 const auth = require('../auth');
 const hub = require('../gateways');
-const { scopeSql } = require('../permissions');
+const { scopeSql, isCentral } = require('../permissions');
 const { optionalId } = require('./util');
 
 const api = express.Router();
@@ -16,6 +16,18 @@ api.get('/audit', auth.requireApi('audit.view'), async (req, res) => {
   if (req.query.type === 'labels') conds.push(`a.action = 'label.send'`);
   else if (req.query.type === 'failed') conds.push('NOT a.success');
   else if (req.query.type === 'admin') conds.push(`a.action <> 'label.send'`);
+  if (req.query.entityType && req.query.entityId) {
+    params.push(String(req.query.entityType), String(req.query.entityId));
+    conds.push(`a.entity_type = $${params.length - 1} AND a.entity_id = $${params.length}`);
+  }
+  if (req.query.action) {
+    params.push(String(req.query.action));
+    conds.push(`a.action = $${params.length}`);
+  }
+  if (req.query.q) {
+    params.push('%' + String(req.query.q).toLowerCase() + '%');
+    conds.push(`(lower(coalesce(a.username, '')) LIKE $${params.length} OR lower(coalesce(a.entity_id, '')) LIKE $${params.length} OR lower(coalesce(a.message, '')) LIKE $${params.length})`);
+  }
   const before = optionalId(req.query.before, 'before');
   if (before) {
     params.push(before);
@@ -64,13 +76,14 @@ api.get('/dashboard', auth.requireApi(), async (req, res) => {
   problems.sort((a, b) => new Date(b.lastSeen || 0) - new Date(a.lastSeen || 0));
 
   const counts = {};
-  if (user.role === 'super_admin') {
+  if (isCentral(user)) {
     counts.dealers = (await db.one('SELECT count(*)::int AS n FROM dealers')).n;
+    counts.dealersActive = (await db.one('SELECT count(*)::int AS n FROM dealers WHERE active')).n;
   }
   // Subelerin kendisi icin kapsam: sube kullanicisi sadece kendi subesini sayar.
   let branchScope = 'TRUE';
   const bParams = [];
-  if (user.role !== 'super_admin') {
+  if (!isCentral(user)) {
     bParams.push(user.dealer_id);
     branchScope = 'dealer_id = $1';
     if (user.branch_id) {

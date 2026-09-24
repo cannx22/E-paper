@@ -6,7 +6,9 @@ ENV NODE_ENV=production \
     DATA_DIR=/app/data
 
 COPY package.json package-lock.json* ./
-RUN npm install --omit=dev && npm cache clean --force
+# --ignore-scripts: bagimliliklarin hicbiri kurulum scripti gerektirmiyor
+# (ikon paketinin istege bagli font derleyicisi Alpine'da derlenmeye calismasin).
+RUN npm ci --omit=dev --ignore-scripts && npm cache clean --force
 
 COPY src ./src
 COPY public ./public

@@ -1,78 +1,74 @@
-<!DOCTYPE html><html lang="tr"><head><meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Bayiler</title>
-<link rel="stylesheet" href="/static/admin.css">
-</head><body>
-<div class="banner">
-  <span class="tag">&#127970;</span>
-  <div>
-    <h1>Bayi Y&ouml;netimi</h1>
-    <p>Bayileri olu&#351;turun, aktif/pasif yap&#305;n.</p>
-  </div>
-  <nav id="nav" class="nav-links"></nav>
-</div>
-<div class="wrap">
-  <section class="card">
-    <h2>Bayiler</h2>
-    <p class="hint">Pasif yap&#305;lan bayinin kullan&#305;c&#305;lar&#305; giri&#351; yapamaz. Gateway atamak i&ccedil;in <a href="/gateways">Gateway'ler</a>, kullan&#305;c&#305; eklemek i&ccedil;in <a href="/users">Kullan&#305;c&#305;lar</a>, &#351;ube eklemek i&ccedil;in <a href="/branches">&#350;ubeler</a> sayfas&#305;n&#305; kullan&#305;n.</p>
-    <div class="table-scroll">
-      <table>
-        <thead><tr><th>Bayi</th><th>Durum</th><th>&#350;ube</th><th>Gateway</th><th>Kullan&#305;c&#305;</th><th>Olu&#351;turulma</th><th></th></tr></thead>
-        <tbody id="body"><tr><td colspan="7">Y&uuml;kleniyor...</td></tr></tbody>
-      </table>
+<script src="/static/theme-boot.js"></script>
+<link rel="stylesheet" href="/vendor/tabler/css/tabler.min.css">
+<link rel="stylesheet" href="/vendor/tabler-icons/tabler-icons.min.css">
+<link rel="stylesheet" href="/static/app.css">
+</head>
+<body>
+<div class="page">
+<div id="app-sidebar"></div>
+<div class="page-wrapper">
+  <div class="page-header d-print-none"><div class="container-xl"><div class="row g-2 align-items-center">
+    <div class="col"><div class="page-pretitle">Kiracılar, lisanslar ve kurum bilgileri</div><h2 class="page-title"><i class="ti ti-building-store me-2"></i>Bayiler</h2></div>
+    <div class="col-auto ms-auto"><div class="btn-list"><button class="btn btn-primary" id="newBtn" data-can="dealer.manage"><i class="ti ti-plus me-1"></i>Yeni Bayi</button></div></div>
+  </div></div></div>
+  <div class="page-body"><div class="container-xl">
+    <div class="card">
+      <div class="card-body border-bottom py-3">
+        <div class="row g-2">
+          <div class="col-md-5"><div class="input-icon"><span class="input-icon-addon"><i class="ti ti-search"></i></span><input class="form-control" id="fSearch" placeholder="Bayi adı, kod, ünvan, il, yetkili"></div></div>
+          <div class="col-md-3"><select class="form-select" id="fActive"><option value="">Tümü</option><option value="1">Aktif</option><option value="0">Pasif</option></select></div>
+          <div class="col-md-auto d-flex align-items-center"><span class="small text-secondary" id="countInfo"></span></div>
+        </div>
+      </div>
+      <div class="table-responsive">
+        <table class="table table-vcenter card-table table-hover">
+          <thead><tr><th>Bayi</th><th>İletişim</th><th>Konum</th><th>Şube</th><th>Gateway</th><th>Cihaz</th><th>Kullanıcı</th><th>Durum</th></tr></thead>
+          <tbody id="body"><tr><td colspan="8" class="text-secondary">Yükleniyor...</td></tr></tbody>
+        </table>
+      </div>
     </div>
-    <div id="listMsg" class="msg"></div>
-  </section>
-  <section class="card">
-    <h2>Yeni Bayi</h2>
-    <form id="addForm">
-      <label for="name">Bayi Ad&#305;</label>
-      <input type="text" id="name" maxlength="60" required placeholder="ABC Market">
-      <button type="submit" class="btn-primary">Olu&#351;tur</button>
-    </form>
-    <div id="addMsg" class="msg"></div>
-  </section>
-</div>
-<script src="/static/common.js"></script>
+  </div></div>
+</div></div>
+<script src="/vendor/tabler/js/tabler.min.js"></script>
+<script src="/static/app.js"></script>
+<script src="/static/org-forms.js"></script>
 <script>
-var dealers = [];
-function refresh(){
-  return apiRequest('GET', '/api/dealers').then(function(list){
-    dealers = list;
-    document.getElementById('body').innerHTML = list.length ? list.map(function(d){
-      return '<tr><td><b>' + escapeHtml(d.name) + '</b></td>' +
-        '<td>' + (d.active ? '<span class="badge online">Aktif</span>' : '<span class="badge inactive">Pasif</span>') + '</td>' +
-        '<td>' + d.branch_count + '</td><td>' + d.gateway_count + '</td><td>' + d.user_count + '</td>' +
-        '<td>' + formatDate(d.created_at) + '</td>' +
-        '<td><div class="actions">' +
-        '<button class="btn-sm" data-act="rename" data-id="' + d.id + '">&#304;sim</button>' +
-        '<button class="btn-sm ' + (d.active ? 'danger' : 'ok') + '" data-act="toggle" data-id="' + d.id + '">' + (d.active ? 'Pasif Yap' : 'Aktif Yap') + '</button>' +
-        '</div></td></tr>';
-    }).join('') : '<tr><td colspan="7">Hen&uuml;z bayi yok.</td></tr>';
-  }).catch(function(err){ showMsg('listMsg', false, err.message); });
+var e = App.escapeHtml, dealers = [];
+function usage(used, max){
+  if (max == null) return '<span>' + used + '</span>';
+  var pct = max ? Math.min(100, used * 100 / max) : 100;
+  return '<div>' + used + ' <span class="text-secondary">/ ' + max + '</span></div><div class="progress progress-sm mt-1" style="width:70px"><div class="progress-bar ' + (pct >= 100 ? 'bg-red' : pct >= 80 ? 'bg-yellow' : 'bg-primary') + '" style="width:' + pct + '%"></div></div>';
 }
-document.getElementById('body').addEventListener('click', function(e){
-  var btn = e.target.closest('button[data-act]');
-  if (!btn) return;
-  var d = dealers.filter(function(x){ return String(x.id) === btn.dataset.id; })[0];
-  var body;
-  if (btn.dataset.act === 'rename'){
-    var name = prompt('Bayi adı:', d.name);
-    if (!name) return;
-    body = {name: name};
-  } else {
-    if (d.active && !confirm(d.name + ' pasif yapılsın mı? Bayinin kullanıcıları giriş yapamayacak.')) return;
-    body = {active: !d.active};
-  }
-  apiRequest('POST', '/api/dealers/' + d.id, body).then(function(){ hideMsg('listMsg'); refresh(); })
-    .catch(function(err){ showMsg('listMsg', false, err.message); });
+function render(){
+  var q = document.getElementById('fSearch').value.trim().toLocaleLowerCase('tr'), act = document.getElementById('fActive').value;
+  var list = dealers.filter(function(d){
+    if (act && String(d.active ? 1 : 0) !== act) return false;
+    return !q || [d.name, d.code, d.legal_name, d.city, d.district, d.contact_name, d.email].some(function(v){ return v && v.toLocaleLowerCase('tr').indexOf(q) !== -1; });
+  });
+  document.getElementById('countInfo').textContent = list.length + ' / ' + dealers.length + ' bayi';
+  document.getElementById('body').innerHTML = list.length ? list.map(function(d){
+    var expired = d.contract_end && d.contract_end < new Date().toISOString().slice(0, 10);
+    return '<tr class="cursor-pointer" onclick="location.href=\'/dealers/' + d.id + '\'">' +
+      '<td><div class="d-flex align-items-center gap-2"><span class="avatar avatar-sm bg-primary-lt">' + e(d.name.slice(0, 2).toUpperCase()) + '</span><div><div class="fw-bold">' + e(d.name) + (d.code ? ' <span class="badge bg-secondary-lt mono">' + e(d.code) + '</span>' : '') + '</div>' +
+        '<div class="small text-secondary text-truncate" style="max-width:260px">' + e(d.legal_name || '') + '</div></div></div></td>' +
+      '<td>' + e(d.contact_name || '-') + '<div class="small text-secondary">' + e(d.phone || d.email || '') + '</div></td>' +
+      '<td>' + e([d.district, d.city].filter(Boolean).join(' / ') || '-') + '</td>' +
+      '<td>' + d.branch_count + '</td><td>' + usage(d.gateway_count, d.max_gateways) + '</td><td>' + usage(d.device_count, d.max_devices) + '</td><td>' + d.user_count + '</td>' +
+      '<td>' + App.activeBadge(d.active) + (expired ? '<div class="small text-danger mt-1">sözleşme bitti</div>' : '') + '</td></tr>';
+  }).join('') : App.emptyRow(8, dealers.length ? 'Filtreye uyan bayi yok' : 'Henüz bayi yok', 'ti-building-store');
+}
+function refresh(){ return App.apiRequest('GET', '/api/dealers').then(function(list){ dealers = list; render(); }); }
+document.getElementById('fSearch').addEventListener('input', render);
+document.getElementById('fActive').addEventListener('change', render);
+document.getElementById('newBtn').addEventListener('click', function(){
+  OrgForms.openDealer(null).then(function(r){ if (r) refresh(); });
 });
-document.getElementById('addForm').addEventListener('submit', function(e){
-  e.preventDefault();
-  apiRequest('POST', '/api/dealers', {name: document.getElementById('name').value}).then(function(d){
-    showMsg('addMsg', true, d.name + ' oluşturuldu.'); e.target.reset(); refresh();
-  }).catch(function(err){ showMsg('addMsg', false, err.message); });
-});
-refresh();
+App.meReady.then(refresh);
 </script>
-</body></html>
+</body>
+</html>

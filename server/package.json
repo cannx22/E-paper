@@ -12,9 +12,13 @@
     "node": ">=20"
   },
   "dependencies": {
+    "@tabler/core": "^1.5.1",
+    "@tabler/icons-webfont": "^3.48.0",
     "express": "^5.2.1",
+    "html5-qrcode": "^2.3.8",
     "pg": "^8.23.0",
     "qrcode": "^1.5.4",
-    "ws": "^8.18.0"
+    "ws": "^8.18.0",
+    "xlsx": "^0.18.5"
   }
 }

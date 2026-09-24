@@ -1,53 +1,72 @@
-<!DOCTYPE html><html lang="tr"><head><meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Giris Yap</title>
-<style>
-:root{
-  --red:#d62828; --red-dark:#b71c1c; --red-darker:#8e0000;
-  --bg:#fff2f2; --card:#ffffff; --border:#e0b3b3;
-  --text:#2b2b2b; --muted:#7f8c8d;
-}
-*{box-sizing:border-box;}
-body{
-  font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;
-  background:var(--bg); color:var(--text); margin:0; padding:0;
-  display:flex; align-items:center; justify-content:center; min-height:100vh;
-}
-.card{background:var(--card); border:2px solid var(--red); border-radius:10px; padding:28px 26px; width:100%; max-width:340px;}
-.card h1{color:var(--red-dark); font-size:18px; margin:0 0 4px;}
-.card p.hint{color:var(--muted); font-size:12px; margin:0 0 18px;}
-label{display:block; font-size:13px; font-weight:600; margin:12px 0 5px;}
-input[type=text],input[type=password]{
-  width:100%; padding:9px 10px; border:1px solid var(--border); border-radius:6px; font-size:14px;
-}
-button{
-  width:100%; margin-top:18px; padding:10px; background:var(--red); color:#fff; border:none;
-  border-radius:6px; font-size:14px; font-weight:700; cursor:pointer;
-}
-button:hover{background:var(--red-dark);}
-.error{display:none; background:#f8d7da; color:#7a1c25; border:1px solid #edb9bf; border-radius:6px; padding:8px 10px; font-size:13px; margin-bottom:6px;}
-</style></head><body>
-<form class="card" method="POST" action="/login">
-  <h1>&#127991;&#65039; E-Paper Raf Etiketleri</h1>
-  <p class="hint">Devam etmek icin giris yapin.</p>
-  <div class="error" id="loginError"></div>
-  <input type="hidden" name="next" id="nextInput">
-  <label for="username">Kullanici Adi / E-posta</label>
-  <input type="text" id="username" name="username" autocomplete="username" required>
-  <label for="password">Sifre</label>
-  <input type="password" id="password" name="password" autocomplete="current-password" required>
-  <button type="submit">Giris Yap</button>
-</form>
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Giriş · E-Paper Yönetim</title>
+<script src="/static/theme-boot.js"></script>
+<link rel="stylesheet" href="/vendor/tabler/css/tabler.min.css">
+<link rel="stylesheet" href="/vendor/tabler-icons/tabler-icons.min.css">
+<link rel="stylesheet" href="/static/app.css">
+</head>
+<body class="d-flex flex-column auth-bg">
+<div class="page page-center">
+  <div class="container container-tight py-4">
+    <div class="text-center mb-4">
+      <span class="d-inline-flex align-items-center gap-2 fs-2 fw-bold">
+        <span class="avatar avatar-md" style="background:linear-gradient(135deg,#4f6ef7,#8b5cf6);color:#fff"><i class="ti ti-tags fs-2"></i></span>
+        E-Paper Yönetim
+      </span>
+    </div>
+    <div class="card card-md shadow-sm">
+      <div class="card-body">
+        <h2 class="h2 text-center mb-2">Hesabınıza giriş yapın</h2>
+        <p class="text-secondary text-center mb-4">E-paper etiket, gateway ve cihaz yönetim paneli</p>
+        <div class="alert alert-danger" id="loginError" hidden></div>
+        <form method="POST" action="/login" autocomplete="on">
+          <input type="hidden" name="next" id="nextInput">
+          <div class="mb-3">
+            <label class="form-label" for="email">E-posta</label>
+            <div class="input-icon">
+              <span class="input-icon-addon"><i class="ti ti-mail"></i></span>
+              <input type="text" class="form-control" id="email" name="email" placeholder="ornek@firma.com" autocomplete="username" required autofocus>
+            </div>
+          </div>
+          <div class="mb-3">
+            <label class="form-label" for="password">Şifre</label>
+            <div class="input-group input-group-flat">
+              <span class="input-group-text"><i class="ti ti-lock"></i></span>
+              <input type="password" class="form-control" id="password" name="password" autocomplete="current-password" required>
+              <span class="input-group-text"><a href="#" class="link-secondary" id="togglePw" title="Şifreyi göster"><i class="ti ti-eye"></i></a></span>
+            </div>
+          </div>
+          <div class="form-footer">
+            <button type="submit" class="btn btn-primary w-100"><i class="ti ti-login-2 me-1"></i>Giriş Yap</button>
+          </div>
+        </form>
+      </div>
+    </div>
+    <div class="text-center text-secondary mt-3 small">Şifrenizi unuttuysanız bayi yöneticinize veya merkeze başvurun.</div>
+  </div>
+</div>
 <script>
 var params = new URLSearchParams(location.search);
 document.getElementById('nextInput').value = params.get('next') || '/';
 var err = params.get('err');
 if (err){
   var el = document.getElementById('loginError');
-  el.textContent = err === 'limit' ? 'Cok fazla hatali deneme. 15 dakika sonra tekrar deneyin.'
-    : err === 'inactive' ? 'Hesabiniz (veya bayiniz/subeniz) pasif durumda. Yoneticinize basvurun.'
-    : 'Hatali kullanici adi veya sifre.';
-  el.style.display = 'block';
+  el.textContent = ({
+    limit: 'Çok fazla hatalı deneme yapıldı. 15 dakika sonra tekrar deneyin.',
+    locked: 'Hesabınız art arda hatalı denemeler nedeniyle 15 dakikalığına kilitlendi. Daha sonra tekrar deneyin veya yöneticinize başvurun.',
+    inactive: 'Hesabınız (veya bayiniz/şubeniz) pasif durumda. Yöneticinize başvurun.'
+  })[err] || 'E-posta veya şifre hatalı.';
+  el.hidden = false;
 }
+document.getElementById('togglePw').addEventListener('click', function(e){
+  e.preventDefault();
+  var i = document.getElementById('password');
+  i.type = i.type === 'password' ? 'text' : 'password';
+  this.firstChild.className = 'ti ' + (i.type === 'password' ? 'ti-eye' : 'ti-eye-off');
+});
 </script>
-</body></html>
+</body>
+</html>

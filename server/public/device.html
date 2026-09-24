@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cihaz</title>
+<script src="/static/theme-boot.js"></script>
+<link rel="stylesheet" href="/vendor/tabler/css/tabler.min.css">
+<link rel="stylesheet" href="/vendor/tabler-icons/tabler-icons.min.css">
+<link rel="stylesheet" href="/static/app.css">
+</head>
+<body>
+<div class="page">
+<div id="app-sidebar"></div>
+<div class="page-wrapper">
+  <div class="page-header d-print-none"><div class="container-xl"><div class="row g-2 align-items-center">
+    <div class="col">
+      <div class="page-pretitle"><a href="/devices" class="text-reset"><i class="ti ti-arrow-left me-1"></i>Cihazlar</a></div>
+      <h2 class="page-title"><i class="ti ti-tag me-2"></i><span class="mono" id="title">...</span><span class="ms-2 fs-3 text-secondary" id="subtitle"></span></h2>
+    </div>
+    <div class="col-auto ms-auto"><div class="btn-list">
+      <a class="btn btn-primary" id="sendLink" data-can="label.send"><i class="ti ti-send me-1"></i>Etiket Gönder</a>
+      <button class="btn" id="toggleBtn" data-can="device.manage"></button>
+      <button class="btn btn-ghost-danger" id="deleteBtn" data-can="device.manage"><i class="ti ti-trash"></i></button>
+    </div></div>
+  </div></div></div>
+
+  <div class="page-body"><div class="container-xl">
+    <div class="row row-cards">
+      <div class="col-lg-4">
+        <div class="card mb-3">
+          <div class="card-header"><h3 class="card-title">Cihaz Bilgileri</h3></div>
+          <div class="card-body"><dl class="row mb-0" id="info"></dl></div>
+        </div>
+        <div class="card">
+          <div class="card-header"><h3 class="card-title">Ekrandaki Son İçerik</h3></div>
+          <div class="card-body" id="content"><span class="text-secondary">Yükleniyor...</span></div>
+        </div>
+      </div>
+      <div class="col-lg-8">
+        <div class="card">
+          <div class="card-header"><h3 class="card-title"><i class="ti ti-history me-2 text-secondary"></i>Güncelleme ve İşlem Geçmişi</h3></div>
+          <div class="table-responsive">
+            <table class="table table-vcenter card-table">
+              <thead><tr><th>Zaman</th><th>Kullanıcı</th><th>İşlem</th><th>İçerik</th><th>Sonuç</th></tr></thead>
+              <tbody id="histBody"><tr><td colspan="5" class="text-secondary">Yükleniyor...</td></tr></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div></div>
+</div></div>
+<script src="/vendor/tabler/js/tabler.min.js"></script>
+<script src="/static/app.js"></script>
+<script>
+var e = App.escapeHtml;
+var serial = decodeURIComponent(location.pathname.split('/')[2] || '');
+var dev = null;
+var FIELD_LABELS = {business: 'İşletme', name: 'Ürün', subtitle: 'Alt başlık', price: 'Fiyat', oldPrice: 'Eski fiyat', unit: 'Birim', bottomCode: 'Alt kod', barcode: 'Barkod'};
+var TEMPLATES = {1: 'Standart', 3: 'Ticket', 4: 'Basic'};
+
+function dt(label, value){ return '<dt class="col-5 text-secondary fw-normal">' + label + '</dt><dd class="col-7">' + value + '</dd>'; }
+function contentSummary(f){
+  if (!f) return '';
+  return [f.name, f.price ? f.price + ' ' + (f.unit || '') : ''].filter(Boolean).join(' · ');
+}
+function load(){
+  App.apiRequest('GET', '/api/devices/' + encodeURIComponent(serial)).then(function(d){
+    dev = d;
+    document.getElementById('title').textContent = d.serial;
+    document.getElementById('subtitle').textContent = d.name || '';
+    document.getElementById('sendLink').href = '/?serial=' + encodeURIComponent(d.serial);
+    document.getElementById('toggleBtn').innerHTML = d.state === 'active' ? '<i class="ti ti-player-pause me-1"></i>Devre Dışı Bırak' : '<i class="ti ti-player-play me-1"></i>Etkinleştir';
+    document.getElementById('info').innerHTML =
+      dt('Durum', d.state === 'active' ? '<span class="badge bg-green-lt">Aktif</span>' : '<span class="badge bg-secondary-lt">Devre Dışı</span>') +
+      dt('Model', e(d.modelName || '-') + (d.resolution ? '<div class="small text-secondary">' + e(d.resolution) + ' px</div>' : '')) +
+      dt('Gateway', d.gatewayId ? '<a href="/gateways/' + e(d.gatewayId) + '"><span class="status-dot st ' + (d.gatewayOnline ? 'st-active' : 'st-offline') + '"></span>' + e(d.gatewayName) + '</a>' : '<span class="badge bg-yellow-lt">atanmadı</span>') +
+      dt('Bayi', e(d.dealerName)) + dt('Şube', e(d.branchName || '-')) +
+      dt('Son başarılı iletişim', d.lastOkAt ? '<span title="' + e(App.formatDate(d.lastOkAt)) + '">' + App.formatRelative(d.lastOkAt) + '</span>' : '-') +
+      dt('Son deneme', d.lastUpdateAt ? (d.lastUpdateOk ? '<span class="text-success">Başarılı</span>' : '<span class="text-danger">Hata</span>') + ' · ' + App.formatRelative(d.lastUpdateAt) +
+         (!d.lastUpdateOk && d.lastUpdateMessage ? '<div class="small text-danger">' + e(d.lastUpdateMessage.replace(/^HATA:\s*/, '')) + '</div>' : '') : '-') +
+      dt('Eklenme', App.formatDate(d.createdAt)) + (d.notes ? dt('Not', '<span class="text-pre">' + e(d.notes) + '</span>') : '');
+
+    var c = d.lastContent;
+    document.getElementById('content').innerHTML = c ? '<div class="mb-2"><span class="badge bg-blue-lt">' + e(TEMPLATES[c.templateID] || 'Şablon ' + c.templateID) + '</span>' +
+      (c.discountEnabled ? ' <span class="badge bg-orange-lt">İndirim</span>' : '') + (c.campaignEnabled ? ' <span class="badge bg-purple-lt">Kampanya</span>' : '') + '</div>' +
+      '<dl class="row mb-0">' + Object.keys(FIELD_LABELS).filter(function(k){ return c[k]; }).map(function(k){ return dt(FIELD_LABELS[k], e(c[k])); }).join('') + '</dl>'
+      : '<div class="text-secondary">Bu cihaza henüz başarılı bir etiket gönderilmedi.</div>';
+
+    document.getElementById('histBody').innerHTML = d.history.length ? d.history.map(function(h){
+      var det = h.details || {};
+      var txt = h.action === 'label.send'
+        ? e(contentSummary(det.fields)) + (det.before ? '<div class="small text-secondary">önceki: ' + e(contentSummary(det.before)) + '</div>' : '')
+        : e(h.message || '');
+      return '<tr><td class="text-nowrap" title="' + e(App.formatDate(h.created_at)) + '">' + App.formatRelative(h.created_at) + '</td><td>' + e(h.username || '-') + '</td>' +
+        '<td>' + e(App.AUDIT_LABELS[h.action] || h.action) + (det.gatewayName ? '<div class="small text-secondary">' + e(det.gatewayName) + '</div>' : '') + '</td>' +
+        '<td>' + txt + '</td><td>' + (h.success ? '<span class="badge bg-green-lt">Başarılı</span>' : '<span class="badge bg-red-lt" title="' + e(h.message || '') + '">Hata</span>') + '</td></tr>';
+    }).join('') : App.emptyRow(5, 'Henüz kayıt yok', 'ti-history');
+  }).catch(function(err){
+    document.getElementById('title').textContent = serial;
+    document.getElementById('info').innerHTML = '<div class="text-danger">' + e(err.message) + '</div>';
+  });
+}
+document.getElementById('toggleBtn').addEventListener('click', function(){
+  var next = dev.state === 'active' ? 'disabled' : 'active';
+  App.apiRequest('POST', '/api/devices/' + serial, {state: next}).then(function(){ App.toast(next === 'active' ? 'Cihaz etkinleştirildi.' : 'Cihaz devre dışı bırakıldı.'); load(); })
+    .catch(function(err){ App.toast(err.message, 'danger'); });
+});
+document.getElementById('deleteBtn').addEventListener('click', function(){
+  App.confirm(serial + ' seri numaralı cihaz silinsin mi? Geçmiş kayıtları işlem geçmişinde kalır.', {danger: true, okText: 'Sil'}).then(function(ok){
+    if (!ok) return;
+    App.apiRequest('DELETE', '/api/devices/' + serial).then(function(){ location.href = '/devices'; }).catch(function(err){ App.toast(err.message, 'danger'); });
+  });
+});
+App.meReady.then(load);
+</script>
+</body>
+</html>

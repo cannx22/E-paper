@@ -1,76 +1,88 @@
-<!DOCTYPE html><html lang="tr"><head><meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>&#304;&#351;lem Ge&ccedil;mi&#351;i</title>
-<link rel="stylesheet" href="/static/admin.css">
-</head><body>
-<div class="banner">
-  <span class="tag">&#128196;</span>
-  <div>
-    <h1>&#304;&#351;lem Ge&ccedil;mi&#351;i</h1>
-    <p>Etiket g&ouml;nderimleri ve y&ouml;netim i&#351;lemleri.</p>
-  </div>
-  <nav id="nav" class="nav-links"></nav>
-</div>
-<div class="wrap" style="max-width:1200px;">
-  <section class="card">
-    <div class="filters">
-      <select id="typeFilter">
-        <option value="">T&uuml;m i&#351;lemler</option>
-        <option value="labels">Sadece etiket g&ouml;nderimleri</option>
-        <option value="admin">Sadece y&ouml;netim i&#351;lemleri</option>
-        <option value="failed">Sadece ba&#351;ar&#305;s&#305;zlar</option>
-      </select>
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>İşlem Geçmişi</title>
+<script src="/static/theme-boot.js"></script>
+<link rel="stylesheet" href="/vendor/tabler/css/tabler.min.css">
+<link rel="stylesheet" href="/vendor/tabler-icons/tabler-icons.min.css">
+<link rel="stylesheet" href="/static/app.css">
+</head>
+<body>
+<div class="page">
+<div id="app-sidebar"></div>
+<div class="page-wrapper">
+  <div class="page-header d-print-none"><div class="container-xl">
+    <div class="page-pretitle">Kim, ne zaman, neyi değiştirdi</div><h2 class="page-title"><i class="ti ti-history me-2"></i>İşlem Geçmişi</h2>
+  </div></div>
+  <div class="page-body"><div class="container-xl">
+    <div class="card">
+      <div class="card-body border-bottom py-3">
+        <div class="row g-2">
+          <div class="col-md-3"><select class="form-select" id="fType">
+            <option value="">Tüm işlemler</option><option value="labels">Etiket gönderimleri</option><option value="admin">Yönetim işlemleri</option><option value="failed">Sadece başarısızlar</option>
+          </select></div>
+          <div class="col-md-5"><div class="input-icon"><span class="input-icon-addon"><i class="ti ti-search"></i></span><input class="form-control" id="fSearch" placeholder="Kullanıcı, seri no / kimlik veya mesaj"></div></div>
+        </div>
+      </div>
+      <div class="table-responsive">
+        <table class="table table-vcenter card-table">
+          <thead><tr><th>Zaman</th><th>Kullanıcı</th><th>İşlem</th><th>Kaynak</th><th>Bayi / Şube</th><th>İçerik / Değişiklik</th><th>Sonuç</th></tr></thead>
+          <tbody id="body"><tr><td colspan="7" class="text-secondary">Yükleniyor...</td></tr></tbody>
+        </table>
+      </div>
+      <div class="card-footer text-center" id="moreWrap" hidden><button class="btn" id="moreBtn">Daha fazla</button></div>
     </div>
-    <div class="table-scroll">
-      <table>
-        <thead><tr><th>Zaman</th><th>Kullan&#305;c&#305;</th><th>&#304;&#351;lem</th><th>Kaynak</th><th>Bayi / &#350;ube</th><th>&#304;&ccedil;erik</th><th>Sonu&ccedil;</th></tr></thead>
-        <tbody id="histBody"><tr><td colspan="7">Y&uuml;kleniyor...</td></tr></tbody>
-      </table>
-    </div>
-    <div style="text-align:center;"><button type="button" class="btn-primary" id="moreBtn" style="display:none;">Daha Fazla</button></div>
-  </section>
-</div>
-<script src="/static/common.js"></script>
-<script src="/static/audit-labels.js"></script>
+  </div></div>
+</div></div>
+<script src="/vendor/tabler/js/tabler.min.js"></script>
+<script src="/static/app.js"></script>
 <script>
-var PAGE = 100, lastId = null;
-
-function contentText(a){
-  var d = a.details;
-  if (a.action === 'label.send' && d && d.fields){
-    var f = d.fields;
-    var before = d.before && d.before.name ? ' (önceki: ' + d.before.name + (d.before.price ? ' ' + d.before.price : '') + ')' : '';
-    return [d.gatewayName, f.business, f.name, f.price ? f.price + ' ' + (f.unit || '') : ''].filter(Boolean).join(' · ') + before;
+var e = App.escapeHtml, PAGE = 100, lastId = null;
+function summary(f){ return f ? [f.business, f.name, f.price ? f.price + ' ' + (f.unit || '') : ''].filter(Boolean).join(' · ') : ''; }
+function diff(before, after){
+  if (typeof before !== 'object' || typeof after !== 'object' || !before || !after) return e(JSON.stringify(before)) + ' → ' + e(JSON.stringify(after));
+  var keys = Object.keys(after).filter(function(k){ return JSON.stringify(before[k]) !== JSON.stringify(after[k]); });
+  if (!keys.length) return '<span class="text-secondary">değişiklik yok</span>';
+  return keys.map(function(k){ return '<span class="text-secondary">' + e(k) + ':</span> ' + e(before[k] == null ? '-' : before[k]) + ' → <strong>' + e(after[k] == null ? '-' : after[k]) + '</strong>'; }).join('<br>');
+}
+function contentCell(a){
+  var d = a.details || {};
+  if (a.action === 'label.send' && d.fields){
+    return e(summary(d.fields)) + (d.gatewayName ? '<div class="small text-secondary">' + e(d.gatewayName) + '</div>' : '') +
+      (d.before ? '<div class="small text-secondary">önceki: ' + e(summary(d.before)) + '</div>' : '');
   }
-  if (d && d.before !== undefined && d.after !== undefined) return JSON.stringify(d.before) + ' → ' + JSON.stringify(d.after);
-  return a.message || '';
+  if (d.before !== undefined && d.after !== undefined && a.action !== 'settings.updated') return '<div class="small">' + diff(d.before, d.after) + '</div>';
+  return e(a.message || '');
 }
-
 function row(a){
-  var result = '<span class="badge ' + (a.success ? 'online' : 'err') + '">' + (a.success ? 'Ba&#351;ar&#305;l&#305;' : 'Hata') + '</span>';
-  if (a.action === 'label.send' && a.message) result += ' <span class="small">' + escapeHtml(a.message) + '</span>';
   var label = a.gateway_name || a.device_name;
-  var entity = label ? escapeHtml(label) + '<br><span class="mono small">' + escapeHtml(a.entity_id) + '</span>' : '<span class="mono">' + escapeHtml(a.entity_id || '-') + '</span>';
-  return '<tr><td>' + formatDate(a.created_at) + '</td><td>' + escapeHtml(a.username || '-') + '</td>' +
-    '<td>' + escapeHtml(auditActionLabel(a.action)) + '</td><td>' + entity + '</td>' +
-    '<td>' + escapeHtml(a.dealer_name || '-') + (a.branch_name ? ' / ' + escapeHtml(a.branch_name) : '') + '</td>' +
-    '<td>' + escapeHtml(contentText(a)) + '</td><td>' + result + '</td></tr>';
+  var link = a.entity_type === 'device' ? '/devices/' + encodeURIComponent(a.entity_id) : a.entity_type === 'gateway' ? '/gateways/' + encodeURIComponent(a.entity_id) : a.entity_type === 'dealer' ? '/dealers/' + a.entity_id : null;
+  var entity = a.entity_id ? (link ? '<a href="' + link + '" class="text-reset">' : '') + (label ? e(label) + '<div class="small text-secondary mono">' + e(a.entity_id) + '</div>' : '<span class="mono">' + e(a.entity_id) + '</span>') + (link ? '</a>' : '') : '-';
+  var result = a.success ? '<span class="badge bg-green-lt">Başarılı</span>' : '<span class="badge bg-red-lt">Hata</span>';
+  if (a.action === 'label.send' && a.message) result += '<div class="small text-secondary mt-1">' + e(a.message.replace(/^HATA:\s*/, '')) + '</div>';
+  return '<tr><td class="text-nowrap" title="' + e(App.formatDate(a.created_at)) + '">' + App.formatDate(a.created_at) + '</td><td>' + e(a.username || 'sistem') + '</td>' +
+    '<td>' + e(App.AUDIT_LABELS[a.action] || a.action) + '</td><td>' + entity + '</td>' +
+    '<td>' + e(a.dealer_name || '-') + (a.branch_name ? '<div class="small text-secondary">' + e(a.branch_name) + '</div>' : '') + '</td>' +
+    '<td style="max-width:360px">' + contentCell(a) + '</td><td>' + result + '</td></tr>';
 }
-
 function load(reset){
-  var type = document.getElementById('typeFilter').value;
-  var url = '/api/audit?limit=' + PAGE + (type ? '&type=' + type : '') + (!reset && lastId ? '&before=' + lastId : '');
-  apiRequest('GET', url).then(function(list){
-    var body = document.getElementById('histBody');
-    if (reset) body.innerHTML = '';
-    if (reset && !list.length) body.innerHTML = '<tr><td colspan="7">Kay&#305;t yok.</td></tr>';
+  var type = document.getElementById('fType').value, q = document.getElementById('fSearch').value.trim();
+  var url = '/api/audit?limit=' + PAGE + (type ? '&type=' + type : '') + (q ? '&q=' + encodeURIComponent(q) : '') + (!reset && lastId ? '&before=' + lastId : '');
+  App.apiRequest('GET', url).then(function(list){
+    var body = document.getElementById('body');
+    if (reset) body.innerHTML = list.length ? '' : App.emptyRow(7, 'Kayıt yok', 'ti-history');
     body.insertAdjacentHTML('beforeend', list.map(row).join(''));
     if (list.length) lastId = list[list.length - 1].id;
-    document.getElementById('moreBtn').style.display = list.length === PAGE ? 'inline-block' : 'none';
+    document.getElementById('moreWrap').hidden = list.length < PAGE;
   });
 }
-document.getElementById('typeFilter').addEventListener('change', function(){ lastId = null; load(true); });
+var t = null;
+document.getElementById('fType').addEventListener('change', function(){ lastId = null; load(true); });
+document.getElementById('fSearch').addEventListener('input', function(){ clearTimeout(t); t = setTimeout(function(){ lastId = null; load(true); }, 350); });
 document.getElementById('moreBtn').addEventListener('click', function(){ load(false); });
-load(true);
+if (App.qs('type')) document.getElementById('fType').value = App.qs('type');
+App.meReady.then(function(){ load(true); });
 </script>
-</body></html>
+</body>
+</html>

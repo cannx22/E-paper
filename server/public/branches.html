@@ -1,101 +1,95 @@
-<!DOCTYPE html><html lang="tr"><head><meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>&#350;ubeler</title>
-<link rel="stylesheet" href="/static/admin.css">
-</head><body>
-<div class="banner">
-  <span class="tag">&#127980;</span>
-  <div>
-    <h1>&#350;ube Y&ouml;netimi</h1>
-    <p>&#350;ube kullan&#305;m&#305; iste&#287;e ba&#287;l&#305;d&#305;r; k&uuml;&ccedil;&uuml;k i&#351;letmeler do&#287;rudan bayi seviyesinde &ccedil;al&#305;&#351;abilir.</p>
-  </div>
-  <nav id="nav" class="nav-links"></nav>
-</div>
-<div class="wrap">
-  <section class="card">
-    <h2>&#350;ubeler</h2>
-    <div class="filters" id="dealerFilterWrap" style="display:none;">
-      <select id="dealerFilter"></select>
-    </div>
-    <div class="table-scroll">
-      <table>
-        <thead><tr><th>&#350;ube</th><th>Bayi</th><th>Durum</th><th>Gateway</th><th>Kullan&#305;c&#305;</th><th></th></tr></thead>
-        <tbody id="body"><tr><td colspan="6">Y&uuml;kleniyor...</td></tr></tbody>
-      </table>
-    </div>
-    <div id="listMsg" class="msg"></div>
-  </section>
-  <section class="card">
-    <h2>Yeni &#350;ube</h2>
-    <form id="addForm">
-      <div class="row">
-        <div id="addDealerWrap" style="display:none;"><label for="addDealer">Bayi</label><select id="addDealer"></select></div>
-        <div><label for="name">&#350;ube Ad&#305;</label><input type="text" id="name" maxlength="60" required placeholder="Kayseri &#350;ube"></div>
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Şubeler</title>
+<script src="/static/theme-boot.js"></script>
+<link rel="stylesheet" href="/vendor/tabler/css/tabler.min.css">
+<link rel="stylesheet" href="/vendor/tabler-icons/tabler-icons.min.css">
+<link rel="stylesheet" href="/static/app.css">
+</head>
+<body>
+<div class="page">
+<div id="app-sidebar"></div>
+<div class="page-wrapper">
+  <div class="page-header d-print-none"><div class="container-xl"><div class="row g-2 align-items-center">
+    <div class="col"><div class="page-pretitle">Şube kullanımı isteğe bağlıdır; küçük işletmeler doğrudan bayi seviyesinde çalışabilir</div><h2 class="page-title"><i class="ti ti-building me-2"></i>Şubeler</h2></div>
+    <div class="col-auto ms-auto"><div class="btn-list"><button class="btn btn-primary" id="newBtn" data-can="branch.manage"><i class="ti ti-plus me-1"></i>Yeni Şube</button></div></div>
+  </div></div></div>
+  <div class="page-body"><div class="container-xl">
+    <div class="card">
+      <div class="card-body border-bottom py-3">
+        <div class="row g-2">
+          <div class="col-md-5"><div class="input-icon"><span class="input-icon-addon"><i class="ti ti-search"></i></span><input class="form-control" id="fSearch" placeholder="Şube adı, kod, il, yetkili"></div></div>
+          <div class="col-md-4" id="fDealerWrap" hidden><select class="form-select" id="fDealer"></select></div>
+          <div class="col-md-auto d-flex align-items-center"><span class="small text-secondary" id="countInfo"></span></div>
+        </div>
       </div>
-      <button type="submit" class="btn-primary">Olu&#351;tur</button>
-    </form>
-    <div id="addMsg" class="msg"></div>
-  </section>
-</div>
-<script src="/static/common.js"></script>
+      <div class="table-responsive">
+        <table class="table table-vcenter card-table table-hover">
+          <thead><tr><th>Şube</th><th>Bayi</th><th>Yetkili / İletişim</th><th>Konum</th><th>Gateway</th><th>Cihaz</th><th>Kullanıcı</th><th>Durum</th><th class="w-1"></th></tr></thead>
+          <tbody id="body"><tr><td colspan="9" class="text-secondary">Yükleniyor...</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+  </div></div>
+</div></div>
+<script src="/vendor/tabler/js/tabler.min.js"></script>
+<script src="/static/app.js"></script>
+<script src="/static/org-forms.js"></script>
 <script>
-var branches = [];
-var isSuper = false;
-function refresh(){
-  var dealerId = isSuper ? document.getElementById('dealerFilter').value : '';
-  return apiRequest('GET', '/api/branches' + (dealerId ? '?dealerId=' + dealerId : '')).then(function(list){
-    branches = list;
-    document.getElementById('body').innerHTML = list.length ? list.map(function(b){
-      return '<tr><td><b>' + escapeHtml(b.name) + '</b></td><td>' + escapeHtml(b.dealer_name) + '</td>' +
-        '<td>' + (b.active ? '<span class="badge online">Aktif</span>' : '<span class="badge inactive">Pasif</span>') + '</td>' +
-        '<td>' + b.gateway_count + '</td><td>' + b.user_count + '</td>' +
-        '<td><div class="actions">' +
-        '<button class="btn-sm" data-act="rename" data-id="' + b.id + '">&#304;sim</button>' +
-        '<button class="btn-sm" data-act="toggle" data-id="' + b.id + '">' + (b.active ? 'Pasif Yap' : 'Aktif Yap') + '</button>' +
-        '<button class="btn-sm danger" data-act="delete" data-id="' + b.id + '">Sil</button>' +
-        '</div></td></tr>';
-    }).join('') : '<tr><td colspan="6">Hen&uuml;z &#351;ube yok.</td></tr>';
-  }).catch(function(err){ showMsg('listMsg', false, err.message); });
+var e = App.escapeHtml, branches = [], dealers = [], isCentral = false;
+function render(){
+  var q = document.getElementById('fSearch').value.trim().toLocaleLowerCase('tr'), dealer = document.getElementById('fDealer').value;
+  var list = branches.filter(function(b){
+    if (dealer && String(b.dealer_id) !== dealer) return false;
+    return !q || [b.name, b.code, b.city, b.district, b.contact_name, b.dealer_name].some(function(v){ return v && v.toLocaleLowerCase('tr').indexOf(q) !== -1; });
+  });
+  var canManage = currentUser.can['branch.manage'];
+  document.getElementById('countInfo').textContent = list.length + ' şube';
+  document.getElementById('body').innerHTML = list.length ? list.map(function(b){
+    var menu = canManage ? '<div class="dropdown"><button class="btn btn-sm btn-icon" data-bs-toggle="dropdown"><i class="ti ti-dots-vertical"></i></button><div class="dropdown-menu dropdown-menu-end">' +
+      '<a class="dropdown-item" href="#" data-act="edit" data-id="' + b.id + '"><i class="ti ti-pencil me-2"></i>Düzenle</a>' +
+      '<a class="dropdown-item" href="#" data-act="toggle" data-id="' + b.id + '"><i class="ti ' + (b.active ? 'ti-player-pause' : 'ti-player-play') + ' me-2"></i>' + (b.active ? 'Pasif Yap' : 'Aktif Yap') + '</a>' +
+      '<a class="dropdown-item text-danger" href="#" data-act="delete" data-id="' + b.id + '"><i class="ti ti-trash me-2"></i>Sil</a></div></div>' : '';
+    return '<tr><td><div class="fw-bold">' + e(b.name) + (b.code ? ' <span class="badge bg-secondary-lt mono">' + e(b.code) + '</span>' : '') + '</div></td>' +
+      '<td><a href="/dealers/' + b.dealer_id + '" class="text-reset">' + e(b.dealer_name) + '</a></td>' +
+      '<td>' + e(b.contact_name || '-') + '<div class="small text-secondary">' + e(b.phone || b.email || '') + '</div></td>' +
+      '<td>' + e([b.district, b.city].filter(Boolean).join(' / ') || '-') + '</td>' +
+      '<td>' + b.gateway_count + '</td><td><a href="/devices?branchId=' + b.id + '">' + b.device_count + '</a></td><td>' + b.user_count + '</td>' +
+      '<td>' + App.activeBadge(b.active) + '</td><td>' + menu + '</td></tr>';
+  }).join('') : App.emptyRow(9, branches.length ? 'Filtreye uyan şube yok' : 'Henüz şube yok', 'ti-building');
 }
-document.getElementById('body').addEventListener('click', function(e){
-  var btn = e.target.closest('button[data-act]');
-  if (!btn) return;
-  var b = branches.filter(function(x){ return String(x.id) === btn.dataset.id; })[0];
-  var req;
-  if (btn.dataset.act === 'rename'){
-    var name = prompt('Şube adı:', b.name);
-    if (!name) return;
-    req = apiRequest('POST', '/api/branches/' + b.id, {name: name});
-  } else if (btn.dataset.act === 'toggle'){
-    req = apiRequest('POST', '/api/branches/' + b.id, {active: !b.active});
-  } else {
-    if (!confirm(b.name + ' silinsin mi? Şubenin gateway\'leri bayi seviyesine taşınır.')) return;
-    req = apiRequest('DELETE', '/api/branches/' + b.id);
+function refresh(){ return App.apiRequest('GET', '/api/branches').then(function(list){ branches = list; render(); }); }
+document.getElementById('fSearch').addEventListener('input', render);
+document.getElementById('fDealer').addEventListener('change', render);
+document.getElementById('newBtn').addEventListener('click', function(){
+  OrgForms.openBranch(null, isCentral ? {dealers: dealers} : {dealerId: currentUser.dealerId}).then(function(r){ if (r) refresh(); });
+});
+document.getElementById('body').addEventListener('click', function(ev){
+  var a = ev.target.closest('[data-act]');
+  if (!a) return;
+  ev.preventDefault();
+  var b = branches.filter(function(x){ return String(x.id) === a.dataset.id; })[0];
+  if (a.dataset.act === 'edit') return OrgForms.openBranch(b).then(function(r){ if (r) refresh(); });
+  if (a.dataset.act === 'toggle') {
+    return App.confirm(b.active ? b.name + ' pasif yapılsın mı? Şube kullanıcılarının oturumu kapanır ve giriş yapamazlar.' : b.name + ' aktif yapılsın mı?', {danger: b.active})
+      .then(function(ok){ if (ok) App.apiRequest('POST', '/api/branches/' + b.id, {active: !b.active}).then(function(){ App.toast('Kaydedildi.'); refresh(); }).catch(function(err){ App.toast(err.message, 'danger'); }); });
   }
-  req.then(function(){ hideMsg('listMsg'); refresh(); }).catch(function(err){ showMsg('listMsg', false, err.message); });
+  App.confirm(b.name + ' silinsin mi? Şubenin gateway ve cihazları bayi seviyesine taşınır.', {danger: true, okText: 'Sil'}).then(function(ok){
+    if (ok) App.apiRequest('DELETE', '/api/branches/' + b.id).then(function(){ App.toast('Şube silindi.'); refresh(); }).catch(function(err){ App.toast(err.message, 'danger'); });
+  });
 });
-document.getElementById('dealerFilter').addEventListener('change', refresh);
-document.getElementById('addForm').addEventListener('submit', function(e){
-  e.preventDefault();
-  apiRequest('POST', '/api/branches', {
-    dealerId: isSuper ? document.getElementById('addDealer').value : undefined,
-    name: document.getElementById('name').value
-  }).then(function(b){
-    showMsg('addMsg', true, b.name + ' oluşturuldu.');
-    document.getElementById('name').value = '';
-    refresh();
-  }).catch(function(err){ showMsg('addMsg', false, err.message); });
-});
-meReady.then(function(me){
-  isSuper = me.role === 'super_admin';
-  if (!isSuper) return refresh();
-  return apiRequest('GET', '/api/dealers').then(function(dealers){
-    document.getElementById('dealerFilterWrap').style.display = 'flex';
-    document.getElementById('addDealerWrap').style.display = 'block';
-    fillSelect(document.getElementById('dealerFilter'), dealers, 'Tüm bayiler');
-    fillSelect(document.getElementById('addDealer'), dealers, 'Bayi seçin');
+App.meReady.then(function(me){
+  isCentral = me.role === 'super_admin' || me.role === 'support';
+  if (!isCentral) return refresh();
+  return App.apiRequest('GET', '/api/dealers').then(function(list){
+    dealers = list;
+    document.getElementById('fDealerWrap').hidden = false;
+    App.fillSelect('fDealer', dealers, 'Tüm bayiler', App.qs('dealerId'));
     return refresh();
   });
 });
 </script>
-</body></html>
+</body>
+</html>

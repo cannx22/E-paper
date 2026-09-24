@@ -8,6 +8,7 @@ const db = require('../db');
 const auth = require('../auth');
 const audit = require('../audit');
 const hub = require('../gateways');
+const settings = require('../settings');
 const { inScope, scopeSql } = require('../permissions');
 const { fail, optionalId } = require('./util');
 
@@ -24,7 +25,7 @@ function normalizeSerial(v) {
 
 const SELECT_DEVICE = `
   SELECT dv.*, m.code AS model_code, m.name AS model_name, m.width_px, m.height_px,
-         d.name AS dealer_name, b.name AS branch_name,
+         d.name AS dealer_name, d.active AS dealer_active, b.name AS branch_name,
          g.name AS gateway_name, g.state AS gateway_state
     FROM devices dv
     LEFT JOIN screen_models m ON m.id = dv.model_id
@@ -53,9 +54,48 @@ function view(dv) {
     lastUpdateAt: dv.last_update_at,
     lastUpdateOk: dv.last_update_ok,
     lastUpdateMessage: dv.last_update_message,
+    lastOkAt: dv.last_ok_at,
     lastContent: dv.last_content,
     createdAt: dv.created_at,
   };
+}
+
+// Seri no havuzu ve cihaz limiti kontrolu (tek ve toplu ekleme ortak).
+// serials icin { serial: hata metni } ve { serial: havuzdaki model_id } doner.
+//   - Havuzda baska bayiye tahsisli numara her zaman reddedilir.
+//   - "Seri no havuzu zorunlu" ayari aciksa havuzda olmayan numara reddedilir.
+//   - Bayinin max_devices limiti asilmaz (limit dolduktan sonraki satirlar reddedilir).
+async function checkInventoryAndQuota(serials, dealerId) {
+  const errors = {};
+  const models = {};
+  const required = !!(await settings.get('inventory_required'));
+  const inv = await db.many('SELECT serial, model_id, dealer_id FROM device_inventory WHERE serial = ANY($1)', [serials]);
+  const bySerial = Object.fromEntries(inv.map((r) => [r.serial, r]));
+  for (const s of serials) {
+    const row = bySerial[s];
+    if (!row) {
+      if (required) errors[s] = 'Seri no havuzunda yok (gecerli bir cihaz degil)';
+    } else if (row.dealer_id && row.dealer_id !== dealerId) {
+      errors[s] = 'Bu seri no baska bir bayiye tahsisli';
+    } else {
+      models[s] = row.model_id;
+    }
+  }
+  const d = await db.one('SELECT max_devices, (SELECT count(*)::int FROM devices WHERE dealer_id = $1) AS used FROM dealers WHERE id = $1', [dealerId]);
+  if (d && d.max_devices != null) {
+    let remaining = d.max_devices - d.used;
+    for (const s of serials) {
+      if (errors[s]) continue;
+      if (remaining <= 0) errors[s] = `Bayinin cihaz limiti dolu (${d.max_devices})`;
+      else remaining--;
+    }
+  }
+  return { errors, models };
+}
+
+// Eklenen cihazlarin havuz kayitlarini bayiye tahsis et.
+async function allocateInventory(client, serials, dealerId) {
+  await client.query('UPDATE device_inventory SET dealer_id = $2 WHERE serial = ANY($1) AND dealer_id IS NULL', [serials, dealerId]);
 }
 
 async function loadDevice(serial) {
@@ -132,6 +172,11 @@ api.get('/devices', requireView, async (req, res) => {
     params.push(branchId);
     conds.push(`dv.branch_id = $${params.length}`);
   }
+  const dealerId = optionalId(req.query.dealerId, 'Bayi');
+  if (dealerId) {
+    params.push(dealerId);
+    conds.push(`dv.dealer_id = $${params.length}`);
+  }
   if (req.query.q) {
     params.push('%' + String(req.query.q).trim().toLowerCase() + '%');
     conds.push(`(dv.id LIKE $${params.length} OR lower(coalesce(dv.name, '')) LIKE $${params.length})`);
@@ -144,8 +189,16 @@ api.get('/devices', requireView, async (req, res) => {
   res.json({ total, limit, offset, devices: rows.map(view) });
 });
 
+// Detay: cihaz bilgisi + guncelleme ve yonetim gecmisi.
 api.get('/devices/:serial', requireView, async (req, res) => {
-  res.json(view(await loadScopedDevice(req)));
+  const dv = await loadScopedDevice(req);
+  const history = await db.many(
+    `SELECT id, created_at, username, action, success, message, details
+       FROM audit_log WHERE entity_type = 'device' AND entity_id = $1
+      ORDER BY id DESC LIMIT 100`,
+    [dv.id],
+  );
+  res.json({ ...view(dv), history });
 });
 
 // Tek cihaz ekleme (elle, barkod okuyucu veya kamera ile okunan seri no).
@@ -154,13 +207,18 @@ api.post('/devices', requireManage, async (req, res) => {
   if (!SERIAL_RE.test(serial)) fail(400, 'Seri numarasi 8 haneli olmali.');
   if (await db.one('SELECT id FROM devices WHERE id = $1', [serial])) fail(400, `${serial} seri numarali cihaz zaten kayitli.`);
   const place = await resolvePlacement(req.user, req.body);
-  const modelId = await resolveModelId(req.body.modelId);
+  const check = await checkInventoryAndQuota([serial], place.dealerId);
+  if (check.errors[serial]) fail(400, `${serial}: ${check.errors[serial]}.`);
+  const modelId = (await resolveModelId(req.body.modelId)) || check.models[serial] || null;
   const name = String(req.body.name || '').trim().slice(0, 80) || null;
-  await db.query(
-    `INSERT INTO devices (id, name, model_id, dealer_id, branch_id, gateway_id, notes)
-     VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-    [serial, name, modelId, place.dealerId, place.branchId, place.gatewayId, String(req.body.notes || '').slice(0, 500) || null],
-  );
+  await db.tx(async (c) => {
+    await c.query(
+      `INSERT INTO devices (id, name, model_id, dealer_id, branch_id, gateway_id, notes)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+      [serial, name, modelId, place.dealerId, place.branchId, place.gatewayId, String(req.body.notes || '').slice(0, 500) || null],
+    );
+    await allocateInventory(c, [serial], place.dealerId);
+  });
   await audit.log(req.user, 'device.created', { entityType: 'device', entityId: serial, dealerId: place.dealerId, branchId: place.branchId, message: name });
   res.json(view(await loadDevice(serial)));
 });
@@ -225,9 +283,18 @@ api.post('/devices/import', requireManage, async (req, res) => {
       out.modelId = m.id;
     }
     out.ok = true;
-    out.message = dryRun ? 'Eklenebilir' : 'Eklendi';
     return out;
   });
+
+  // Havuz ve limit kontrolu: sadece diger kontrollerden gecen satirlar icin,
+  // dosyadaki sirayla (limit dolunca sonraki satirlar reddedilir).
+  const candidates = report.filter((r) => r.ok);
+  const check = await checkInventoryAndQuota(candidates.map((r) => r.serial), base.dealerId);
+  for (const r of candidates) {
+    if (check.errors[r.serial]) { r.ok = false; r.message = check.errors[r.serial]; continue; }
+    if (!r.modelId && check.models[r.serial]) r.modelId = check.models[r.serial];
+    r.message = dryRun ? 'Eklenebilir' : 'Eklendi';
+  }
 
   const valid = report.filter((r) => r.ok);
   if (!dryRun && valid.length) {
@@ -238,6 +305,7 @@ api.post('/devices/import', requireManage, async (req, res) => {
           [r.serial, r.name, r.modelId, base.dealerId, r.branchId, r.gatewayId],
         );
       }
+      await allocateInventory(c, valid.map((r) => r.serial), base.dealerId);
     });
     await audit.log(user, 'device.imported', {
       entityType: 'device', dealerId: base.dealerId, branchId: user.branch_id || null,
@@ -263,10 +331,19 @@ api.post('/devices/:serial', requireManage, async (req, res) => {
   const name = req.body.name !== undefined ? (String(req.body.name).trim().slice(0, 80) || null) : dv.name;
   const state = req.body.state === 'disabled' || req.body.state === 'active' ? req.body.state : dv.state;
   const notes = req.body.notes !== undefined ? (String(req.body.notes).slice(0, 500) || null) : dv.notes;
-  await db.query(
-    `UPDATE devices SET name = $2, model_id = $3, dealer_id = $4, branch_id = $5, gateway_id = $6, state = $7, notes = $8 WHERE id = $1`,
-    [dv.id, name, modelId, place.dealerId, place.branchId, place.gatewayId, state, notes],
-  );
+  const dealerChanged = place.dealerId !== dv.dealer_id;
+  if (dealerChanged) {
+    // Bayiler arasi transfer (sadece merkez): yeni bayinin limiti kontrol edilir.
+    const d = await db.one('SELECT max_devices, (SELECT count(*)::int FROM devices WHERE dealer_id = $1) AS used FROM dealers WHERE id = $1', [place.dealerId]);
+    if (d.max_devices != null && d.used >= d.max_devices) fail(400, `Hedef bayinin cihaz limiti dolu (${d.max_devices}).`);
+  }
+  await db.tx(async (c) => {
+    await c.query(
+      `UPDATE devices SET name = $2, model_id = $3, dealer_id = $4, branch_id = $5, gateway_id = $6, state = $7, notes = $8 WHERE id = $1`,
+      [dv.id, name, modelId, place.dealerId, place.branchId, place.gatewayId, state, notes],
+    );
+    if (dealerChanged) await c.query('UPDATE device_inventory SET dealer_id = $2 WHERE serial = $1', [dv.id, place.dealerId]);
+  });
   await audit.log(req.user, 'device.updated', {
     entityType: 'device', entityId: dv.id, dealerId: place.dealerId, branchId: place.branchId,
     details: {
@@ -316,4 +393,4 @@ api.delete('/devices/:serial', requireManage, async (req, res) => {
   res.json({ ok: true });
 });
 
-module.exports = { api, loadDevice, SERIAL_RE, normalizeSerial };
+module.exports = { api, loadDevice, SERIAL_RE, normalizeSerial, IMPORT_MAX_ROWS };

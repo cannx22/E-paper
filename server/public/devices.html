@@ -1,377 +1,355 @@
-<!DOCTYPE html><html lang="tr"><head><meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>E-Paper Cihazlar</title>
-<link rel="stylesheet" href="/static/admin.css">
-<style>
-.tabs{display:flex; gap:6px; margin-bottom:12px; flex-wrap:wrap;}
-.tabs button{padding:8px 14px; border:1px solid var(--red); background:#fff; color:var(--red-dark); border-radius:6px; font-weight:700; cursor:pointer;}
-.tabs button.active{background:var(--red); color:#fff;}
-.bulkbar{display:none; gap:8px; align-items:center; flex-wrap:wrap; background:#fff3cd; border:1px solid #f0d67a; border-radius:8px; padding:8px 12px; margin-bottom:10px; font-size:13px;}
-.bulkbar.show{display:flex;}
-#scanner{width:100%; max-width:420px; margin-top:10px;}
-textarea{width:100%; min-height:120px; padding:9px 10px; border:1px solid var(--border); border-radius:6px; font-family:Consolas,"Courier New",monospace; font-size:13px;}
-.dot{display:inline-block; width:8px; height:8px; border-radius:50%; margin-right:4px; vertical-align:middle;}
-.dot.on{background:#1e7e34;} .dot.off{background:#aaa;}
-td.check,th.check{width:28px;}
-.upd-ok{color:#1e7e34; font-weight:700;} .upd-err{color:#8e0000; font-weight:700;}
-</style>
-</head><body>
-<div class="banner">
-  <span class="tag">&#127991;&#65039;</span>
-  <div>
-    <h1>E-Paper Cihazlar</h1>
-    <p>Her e-paper etiket 8 haneli seri numaras&#305;yla kay&#305;tl&#305; bir cihazd&#305;r.</p>
-  </div>
-  <nav id="nav" class="nav-links"></nav>
-</div>
-<div class="wrap" style="max-width:1280px;">
-  <section class="card" id="addCard" style="display:none;">
-    <h2>Cihaz Ekle</h2>
-    <div class="tabs">
-      <button type="button" class="active" data-tab="single">Tek Cihaz / Barkod</button>
-      <button type="button" data-tab="bulk">Toplu Ekleme (Excel / Liste)</button>
-    </div>
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cihazlar</title>
+<script src="/static/theme-boot.js"></script>
+<link rel="stylesheet" href="/vendor/tabler/css/tabler.min.css">
+<link rel="stylesheet" href="/vendor/tabler-icons/tabler-icons.min.css">
+<link rel="stylesheet" href="/static/app.css">
+</head>
+<body>
+<div class="page">
+<div id="app-sidebar"></div>
+<div class="page-wrapper">
+  <div class="page-header d-print-none"><div class="container-xl"><div class="row g-2 align-items-center">
+    <div class="col"><div class="page-pretitle">Her e-paper etiket 8 haneli seri numarasıyla kayıtlı bir cihazdır</div><h2 class="page-title"><i class="ti ti-tags me-2"></i>E-Paper Cihazlar</h2></div>
+    <div class="col-auto ms-auto"><div class="btn-list" data-can="device.manage">
+      <button class="btn" id="openBulkBtn"><i class="ti ti-file-spreadsheet me-1"></i>Toplu Ekle</button>
+      <button class="btn btn-primary" id="openAddBtn"><i class="ti ti-plus me-1"></i>Cihaz Ekle</button>
+    </div></div>
+  </div></div></div>
 
-    <div id="tab-single">
-      <form id="addForm">
-        <div class="row">
-          <div>
-            <label for="addSerial">Seri No (8 hane)</label>
-            <input type="text" id="addSerial" inputmode="numeric" maxlength="8" pattern="\d{8}" placeholder="80156767" required autocomplete="off">
-          </div>
-          <div><label for="addName">&#304;sim / Konum (iste&#287;e ba&#287;l&#305;)</label><input type="text" id="addName" maxlength="80" placeholder="Raf 3 - &Ccedil;ay"></div>
-          <div><label for="addModel">Ekran Modeli</label><select id="addModel"></select></div>
+  <div class="page-body"><div class="container-xl">
+    <div class="card">
+      <div class="card-body border-bottom py-3">
+        <div class="row g-2">
+          <div class="col-md-4"><div class="input-icon"><span class="input-icon-addon"><i class="ti ti-search"></i></span><input type="text" class="form-control" id="fSearch" placeholder="Seri no veya isim ara"></div></div>
+          <div class="col-md" id="fDealerWrap" hidden><select class="form-select" id="fDealer"></select></div>
+          <div class="col-md"><select class="form-select" id="fGateway"></select></div>
+          <div class="col-md branch-field"><select class="form-select" id="fBranch"></select></div>
+          <div class="col-md-auto d-flex align-items-center"><span class="text-secondary small" id="countInfo"></span></div>
         </div>
-        <div class="row">
-          <div class="dealer-field"><label for="addDealer">Bayi</label><select id="addDealer"></select></div>
-          <div><label for="addGateway">Gateway</label><select id="addGateway"></select></div>
-          <div class="branch-field"><label for="addBranch">&#350;ube</label><select id="addBranch"></select></div>
-        </div>
-        <label class="small" style="font-weight:600;"><input type="checkbox" id="rapidMode" checked style="width:auto;"> H&#305;zl&#305; tarama: eklenince seri no alan&#305; temizlensin (barkod okuyucu ile arka arkaya okutmak i&ccedil;in; okuyucu Enter g&ouml;nderince kay&#305;t yap&#305;l&#305;r)</label>
-        <div class="row" style="align-items:center;">
-          <button type="submit" class="btn-primary">Cihaz&#305; Ekle</button>
-          <button type="button" class="btn-primary" id="scanBtn" style="background:#555;">&#128247; Kamera ile Oku</button>
-        </div>
-        <div id="scanner"></div>
-      </form>
-      <div id="addMsg" class="msg"></div>
-    </div>
-
-    <div id="tab-bulk" style="display:none;">
-      <p class="hint">Excel/CSV dosyas&#305; y&uuml;kleyin (s&uuml;tunlar: <b>Seri No</b>, &#304;sim, Model, Gateway, &#350;ube) ya da seri numaralar&#305;n&#305; alt alta yap&#305;&#351;t&#305;r&#305;n (<span class="mono">seri;isim</span> bi&ccedil;iminde de olabilir). &Ouml;nce kontrol edilir, sonra ge&ccedil;erli sat&#305;rlar eklenir.</p>
-      <div class="row">
-        <div><label for="bulkFile">Excel / CSV Dosyas&#305;</label><input type="file" id="bulkFile" accept=".xlsx,.xls,.csv"></div>
-        <div style="flex:0 0 auto;"><button type="button" class="btn-primary" id="bulkTemplateBtn" style="background:#555;">&#128229; &Ouml;rnek &#350;ablon</button></div>
       </div>
-      <label for="bulkText">veya Seri No Listesi</label>
-      <textarea id="bulkText" placeholder="80156767&#10;80156768;Raf 2 - Kahve&#10;80156769"></textarea>
-      <div class="row">
-        <div class="dealer-field"><label for="bulkDealer">Bayi</label><select id="bulkDealer"></select></div>
-        <div><label for="bulkGateway">Varsay&#305;lan Gateway</label><select id="bulkGateway"></select></div>
-        <div class="branch-field"><label for="bulkBranch">Varsay&#305;lan &#350;ube</label><select id="bulkBranch"></select></div>
-        <div><label for="bulkModel">Varsay&#305;lan Model</label><select id="bulkModel"></select></div>
+      <div class="card-body py-2 bg-yellow-lt bulk-bar" id="bulkBar" hidden>
+        <div class="d-flex flex-wrap align-items-center gap-2">
+          <strong><span id="selCount">0</span> cihaz seçili</strong>
+          <button class="btn btn-sm btn-primary" data-bulk="assign"><i class="ti ti-arrows-exchange me-1"></i>Gateway / Şube Ata</button>
+          <button class="btn btn-sm" data-bulk="disable"><i class="ti ti-player-pause me-1"></i>Devre Dışı</button>
+          <button class="btn btn-sm" data-bulk="enable"><i class="ti ti-player-play me-1"></i>Etkinleştir</button>
+          <button class="btn btn-sm btn-ghost-danger" data-bulk="delete"><i class="ti ti-trash me-1"></i>Sil</button>
+          <button class="btn btn-sm btn-ghost-secondary ms-auto" data-bulk="clear">Seçimi kaldır</button>
+        </div>
       </div>
-      <button type="button" class="btn-primary" id="bulkCheckBtn">Kontrol Et</button>
-      <button type="button" class="btn-primary" id="bulkCommitBtn" style="display:none; background:#1e7e34;"></button>
-      <div id="bulkMsg" class="msg"></div>
-      <div class="table-scroll" id="bulkReportWrap" style="display:none; margin-top:12px;">
-        <table>
-          <thead><tr><th>Sat&#305;r</th><th>Seri No</th><th>&#304;sim</th><th>Gateway</th><th>&#350;ube</th><th>Sonu&ccedil;</th></tr></thead>
-          <tbody id="bulkReport"></tbody>
+      <div class="table-responsive">
+        <table class="table table-vcenter card-table table-hover">
+          <thead><tr>
+            <th class="w-1 manage-col"><input class="form-check-input m-0 align-middle" type="checkbox" id="checkAll"></th>
+            <th>Seri No</th><th>İsim / Konum</th><th>Model</th><th>Gateway</th><th>Bayi / Şube</th><th>Durum</th><th>Son Güncelleme</th><th class="w-1"></th>
+          </tr></thead>
+          <tbody id="devBody"><tr><td colspan="9" class="text-secondary">Yükleniyor...</td></tr></tbody>
         </table>
       </div>
+      <div class="card-footer text-center" id="moreWrap" hidden><button class="btn" id="moreBtn">Daha fazla yükle</button></div>
     </div>
-  </section>
+  </div></div>
+</div></div>
 
-  <section class="card">
-    <h2>Cihazlar</h2>
-    <div class="filters">
-      <input type="text" id="fSearch" placeholder="Seri no veya isim ara">
-      <select id="fGateway"></select>
-      <select id="fBranch" class="branch-field"></select>
-      <span class="small" id="countInfo"></span>
+<!-- Tek cihaz ekleme -->
+<div class="modal modal-blur fade" id="addModal" tabindex="-1"><div class="modal-dialog modal-lg modal-dialog-centered"><div class="modal-content">
+  <div class="modal-header"><h5 class="modal-title"><i class="ti ti-plus me-2"></i>Cihaz Ekle</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+  <form id="addForm">
+    <div class="modal-body">
+      <div class="row g-3">
+        <div class="col-md-6">
+          <label class="form-label required">Seri No (8 hane)</label>
+          <div class="input-group">
+            <input class="form-control form-control-lg mono" id="addSerial" inputmode="numeric" maxlength="8" pattern="\d{8}" placeholder="80156767" required>
+            <button type="button" class="btn" id="scanBtn" title="Kamera ile oku"><i class="ti ti-camera"></i></button>
+          </div>
+          <div class="form-hint">Elle yazın, USB barkod okuyucuyla okutun veya kamerayı kullanın.</div>
+        </div>
+        <div class="col-md-6"><label class="form-label">İsim / Konum</label><input class="form-control" id="addName" maxlength="80" placeholder="Raf 3 - Çay"></div>
+        <div class="col-12"><div id="scanner" style="max-width:420px"></div></div>
+        <div class="col-md-6 dealer-field"><label class="form-label required">Bayi</label><select class="form-select" id="addDealer"></select></div>
+        <div class="col-md-6"><label class="form-label">Ekran Modeli</label><select class="form-select" id="addModel"></select></div>
+        <div class="col-md-6"><label class="form-label">Gateway</label><select class="form-select" id="addGateway"></select></div>
+        <div class="col-md-6 branch-field"><label class="form-label">Şube</label><select class="form-select" id="addBranch"></select><div class="form-hint">Boş bırakılırsa gateway'in şubesi kullanılır.</div></div>
+        <div class="col-12"><label class="form-check form-switch"><input class="form-check-input" type="checkbox" id="rapidMode" checked><span class="form-check-label">Hızlı tarama: eklenince pencere açık kalsın, seri no temizlensin (arka arkaya okutmak için)</span></label></div>
+      </div>
+      <div id="addMsg" hidden></div>
+      <div class="mt-2" id="addedList"></div>
     </div>
-    <div class="bulkbar" id="bulkBar">
-      <b id="selCount">0</b> cihaz se&ccedil;ili:
-      <button class="btn-sm primary" data-bulk="assign">Gateway / &#350;ube Ata</button>
-      <button class="btn-sm" data-bulk="disable">Devre D&#305;&#351;&#305;</button>
-      <button class="btn-sm ok" data-bulk="enable">Etkinle&#351;tir</button>
-      <button class="btn-sm danger" data-bulk="delete">Sil</button>
-      <button class="btn-sm" data-bulk="clear">Se&ccedil;imi Kald&#305;r</button>
-    </div>
-    <div class="table-scroll">
-      <table>
-        <thead><tr><th class="check manage-col"><input type="checkbox" id="checkAll" style="width:auto;"></th><th>Seri No</th><th>&#304;sim / Konum</th><th>Model</th><th>Gateway</th><th>Bayi / &#350;ube</th><th>Durum</th><th>Son G&uuml;ncelleme</th><th></th></tr></thead>
-        <tbody id="devBody"><tr><td colspan="9">Y&uuml;kleniyor...</td></tr></tbody>
-      </table>
-    </div>
-    <div style="text-align:center;"><button type="button" class="btn-primary" id="moreBtn" style="display:none;">Daha Fazla</button></div>
-    <div id="listMsg" class="msg"></div>
-  </section>
-</div>
-
-<dialog id="editDlg">
-  <form method="dialog" id="editForm">
-    <h3 id="editTitle">Cihaz</h3>
-    <label for="eName">&#304;sim / Konum</label><input type="text" id="eName" maxlength="80">
-    <label for="eModel">Ekran Modeli</label><select id="eModel"></select>
-    <label for="eGateway">Gateway</label><select id="eGateway"></select>
-    <div class="branch-field"><label for="eBranch">&#350;ube</label><select id="eBranch"></select></div>
-    <label for="eState">Durum</label>
-    <select id="eState"><option value="active">Aktif</option><option value="disabled">Devre D&#305;&#351;&#305;</option></select>
-    <label for="eNotes">Not</label><input type="text" id="eNotes" maxlength="500">
-    <div class="dlg-actions">
-      <button type="button" class="cancel" data-close>Vazge&ccedil;</button>
-      <button type="submit" class="ok">Kaydet</button>
-    </div>
+    <div class="modal-footer"><button type="button" class="btn btn-link link-secondary me-auto" data-bs-dismiss="modal">Kapat</button><button type="submit" class="btn btn-primary" id="addBtn"><i class="ti ti-plus me-1"></i>Ekle</button></div>
   </form>
-</dialog>
+</div></div></div>
 
-<dialog id="assignDlg">
-  <form method="dialog" id="assignForm">
-    <h3>Toplu Atama</h3>
-    <p class="small" id="assignInfo"></p>
-    <label for="aGateway">Gateway</label><select id="aGateway"></select>
-    <div class="branch-field"><label for="aBranch">&#350;ube</label><select id="aBranch"></select></div>
-    <div class="dlg-actions">
-      <button type="button" class="cancel" data-close>Vazge&ccedil;</button>
-      <button type="submit" class="ok">Ata</button>
+<!-- Toplu ekleme -->
+<div class="modal modal-blur fade" id="bulkModal" tabindex="-1"><div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable"><div class="modal-content">
+  <div class="modal-header"><h5 class="modal-title"><i class="ti ti-file-spreadsheet me-2"></i>Toplu Cihaz Ekleme</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+  <div class="modal-body">
+    <div class="row g-3">
+      <div class="col-lg-6">
+        <label class="form-label">Excel / CSV dosyası</label>
+        <input type="file" class="form-control" id="bulkFile" accept=".xlsx,.xls,.csv">
+        <div class="form-hint">Sütunlar: <b>Seri No</b>, İsim, Model, Gateway, Şube. <a href="#" id="bulkTemplateBtn">Örnek şablonu indir</a></div>
+        <label class="form-label mt-3">veya seri no listesi</label>
+        <textarea class="form-control mono" id="bulkText" rows="6" placeholder="80156767&#10;80156768;Raf 2 - Kahve&#10;80156769"></textarea>
+        <div class="form-hint">Her satıra bir seri no; isteğe bağlı olarak <span class="mono">seri;isim</span>.</div>
+      </div>
+      <div class="col-lg-6">
+        <div class="row g-3">
+          <div class="col-12 dealer-field"><label class="form-label required">Bayi</label><select class="form-select" id="bulkDealer"></select></div>
+          <div class="col-md-6"><label class="form-label">Varsayılan Gateway</label><select class="form-select" id="bulkGateway"></select></div>
+          <div class="col-md-6 branch-field"><label class="form-label">Varsayılan Şube</label><select class="form-select" id="bulkBranch"></select></div>
+          <div class="col-12"><label class="form-label">Varsayılan Ekran Modeli</label><select class="form-select" id="bulkModel"></select></div>
+        </div>
+        <div class="alert alert-info mt-3 mb-0 small"><i class="ti ti-info-circle me-1"></i>Önce kontrol raporu çıkar: geçersiz, tekrar eden, zaten kayıtlı veya havuzda olmayan satırlar gösterilir. Ardından yalnızca geçerli satırlar eklenir.</div>
+      </div>
     </div>
-  </form>
-</dialog>
+    <div id="bulkMsg" hidden></div>
+    <div class="table-responsive mt-3" id="bulkReportWrap" hidden>
+      <table class="table table-sm table-vcenter"><thead><tr><th>Satır</th><th>Seri No</th><th>İsim</th><th>Gateway</th><th>Şube</th><th>Sonuç</th></tr></thead><tbody id="bulkReport"></tbody></table>
+    </div>
+  </div>
+  <div class="modal-footer">
+    <button type="button" class="btn btn-link link-secondary me-auto" data-bs-dismiss="modal">Kapat</button>
+    <button type="button" class="btn" id="bulkCheckBtn"><i class="ti ti-list-check me-1"></i>Kontrol Et</button>
+    <button type="button" class="btn btn-success" id="bulkCommitBtn" hidden></button>
+  </div>
+</div></div></div>
 
-<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-<script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
-<script src="/static/common.js"></script>
+<!-- Duzenleme -->
+<div class="modal modal-blur fade" id="editModal" tabindex="-1"><div class="modal-dialog modal-dialog-centered"><div class="modal-content">
+  <div class="modal-header"><h5 class="modal-title" id="editTitle">Cihaz</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+  <form id="editForm"><div class="modal-body">
+    <div class="mb-3"><label class="form-label">İsim / Konum</label><input class="form-control" id="eName" maxlength="80"></div>
+    <div class="mb-3"><label class="form-label">Ekran Modeli</label><select class="form-select" id="eModel"></select></div>
+    <div class="mb-3 dealer-field"><label class="form-label">Bayi (transfer)</label><select class="form-select" id="eDealer"></select></div>
+    <div class="mb-3"><label class="form-label">Gateway</label><select class="form-select" id="eGateway"></select></div>
+    <div class="mb-3 branch-field"><label class="form-label">Şube</label><select class="form-select" id="eBranch"></select></div>
+    <div class="mb-3"><label class="form-label">Durum</label><select class="form-select" id="eState"><option value="active">Aktif</option><option value="disabled">Devre Dışı</option></select></div>
+    <div><label class="form-label">Not</label><textarea class="form-control" id="eNotes" rows="2" maxlength="500"></textarea></div>
+  </div>
+  <div class="modal-footer"><button type="button" class="btn btn-link link-secondary me-auto" data-bs-dismiss="modal">Vazgeç</button><button type="submit" class="btn btn-primary">Kaydet</button></div></form>
+</div></div></div>
+
+<!-- Toplu atama -->
+<div class="modal modal-blur fade" id="assignModal" tabindex="-1"><div class="modal-dialog modal-sm modal-dialog-centered"><div class="modal-content">
+  <div class="modal-header"><h5 class="modal-title">Toplu Atama</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+  <form id="assignForm"><div class="modal-body">
+    <p class="text-secondary" id="assignInfo"></p>
+    <div class="mb-3"><label class="form-label">Gateway</label><select class="form-select" id="aGateway"></select></div>
+    <div class="branch-field"><label class="form-label">Şube</label><select class="form-select" id="aBranch"></select></div>
+  </div>
+  <div class="modal-footer"><button type="button" class="btn btn-link link-secondary me-auto" data-bs-dismiss="modal">Vazgeç</button><button type="submit" class="btn btn-primary">Ata</button></div></form>
+</div></div></div>
+
+<script src="/vendor/tabler/js/tabler.min.js"></script>
+<script src="/vendor/xlsx/xlsx.full.min.js"></script>
+<script src="/vendor/html5-qrcode/html5-qrcode.min.js"></script>
+<script src="/static/app.js"></script>
 <script>
+var e = App.escapeHtml, $ = function(id){ return document.getElementById(id); };
 var PAGE = 500;
 var devices = [], total = 0, selected = new Set();
 var gateways = [], branches = [], models = [], dealers = [];
-var canManage = false, isSuper = false;
+var canManage = false, isCentral = false, isSuper = false;
 
-function $(id){ return document.getElementById(id); }
-function gatewaysOf(dealerId){
-  return gateways.filter(function(g){ return g.dealerId && (!dealerId || String(g.dealerId) === String(dealerId)); });
-}
-function branchesOf(dealerId){
-  return branches.filter(function(b){ return !dealerId || String(b.dealer_id) === String(dealerId); });
-}
-function gwOptions(list){
-  return list.map(function(g){ return {id: g.id, name: (g.online ? '● ' : '○ ') + g.name + ' (' + g.id.slice(-6) + ')'}; });
-}
-function modelOptions(){ return models.map(function(m){ return {id: m.id, name: m.name + ' - ' + m.width_px + 'x' + m.height_px}; }); }
-
-// Bayi secimine bagli gateway/sube kutularini doldurur (merkez icin).
+function gatewaysOf(dealerId){ return gateways.filter(function(g){ return g.dealerId && (!dealerId || String(g.dealerId) === String(dealerId)); }); }
+function branchesOf(dealerId){ return branches.filter(function(b){ return !dealerId || String(b.dealer_id) === String(dealerId); }); }
+function gwOptions(list){ return list.map(function(g){ return {id: g.id, name: (g.online ? '● ' : '○ ') + g.name + ' (' + g.id.slice(-6) + ')'}; }); }
+function modelOptions(){ return models.map(function(m){ return {id: m.id, name: m.name + ' · ' + m.width_px + '×' + m.height_px}; }); }
 function fillPlacement(prefix, dealerId, keepGateway, keepBranch){
-  fillSelect($(prefix + 'Gateway'), gwOptions(gatewaysOf(dealerId)), '(gateway yok)', keepGateway);
-  if ($(prefix + 'Branch')) fillSelect($(prefix + 'Branch'), branchesOf(dealerId), '(şube yok / bayi seviyesi)', keepBranch);
+  App.fillSelect($(prefix + 'Gateway'), gwOptions(gatewaysOf(dealerId)), '(gateway yok)', keepGateway);
+  if ($(prefix + 'Branch')) App.fillSelect($(prefix + 'Branch'), branchesOf(dealerId).map(function(b){ return {id: b.id, name: b.name}; }), '(şube yok / bayi seviyesi)', keepBranch);
 }
 
-// ---- Liste ----
+// ---------- Liste ----------
+function updateCell(d){
+  if (!d.lastUpdateAt) return '<span class="text-secondary">-</span>';
+  var h = '<span class="badge ' + (d.lastUpdateOk ? 'bg-green-lt' : 'bg-red-lt') + '">' + (d.lastUpdateOk ? 'Başarılı' : 'Hata') + '</span> <span class="small text-secondary" title="' + e(App.formatDate(d.lastUpdateAt)) + '">' + App.formatRelative(d.lastUpdateAt) + '</span>';
+  if (d.lastContent && d.lastContent.name) h += '<div class="small text-truncate" style="max-width:220px">' + e(d.lastContent.name) + (d.lastContent.price ? ' · ' + e(d.lastContent.price) + ' ' + e(d.lastContent.unit || '') : '') + '</div>';
+  return h;
+}
 function render(){
-  var body = $('devBody');
   $('countInfo').textContent = devices.length + ' / ' + total + ' cihaz';
-  if (!devices.length){
-    body.innerHTML = '<tr><td colspan="9">' + (total ? 'Filtreye uyan cihaz yok.' : 'Hen&uuml;z cihaz eklenmedi.') + '</td></tr>';
-  } else {
-    body.innerHTML = devices.map(function(d){
-      var s = escapeHtml(d.serial);
-      var gw = d.gatewayId ? '<span class="dot ' + (d.gatewayOnline ? 'on' : 'off') + '"></span>' + escapeHtml(d.gatewayName) : '<span class="small">atanmad&#305;</span>';
-      var upd = '-';
-      if (d.lastUpdateAt){
-        upd = '<span class="' + (d.lastUpdateOk ? 'upd-ok' : 'upd-err') + '">' + (d.lastUpdateOk ? 'Ba&#351;ar&#305;l&#305;' : 'Hata') + '</span> <span class="small">' + formatDate(d.lastUpdateAt) + '</span>';
-        if (d.lastContent && d.lastContent.name) upd += '<br><span class="small">' + escapeHtml(d.lastContent.name) + (d.lastContent.price ? ' - ' + escapeHtml(d.lastContent.price) + ' ' + escapeHtml(d.lastContent.unit || '') : '') + '</span>';
-        if (!d.lastUpdateOk) upd += '<br><span class="small" style="color:#8e0000">' + escapeHtml(d.lastUpdateMessage || '') + '</span>';
-      }
-      var actions = '<a class="btn-sm primary" style="text-decoration:none" href="/?serial=' + s + '">Etiket G&ouml;nder</a>';
-      if (canManage) actions += '<button class="btn-sm" data-act="edit" data-serial="' + s + '">D&uuml;zenle</button><button class="btn-sm danger" data-act="delete" data-serial="' + s + '">Sil</button>';
-      return '<tr>' +
-        (canManage ? '<td class="check"><input type="checkbox" data-sel="' + s + '"' + (selected.has(d.serial) ? ' checked' : '') + ' style="width:auto;"></td>' : '') +
-        '<td class="mono"><b>' + s + '</b></td>' +
-        '<td>' + escapeHtml(d.name || '') + (d.notes ? '<br><span class="small">' + escapeHtml(d.notes) + '</span>' : '') + '</td>' +
-        '<td>' + escapeHtml(d.modelName || '-') + '</td>' +
-        '<td>' + gw + '</td>' +
-        '<td>' + escapeHtml(d.dealerName) + (d.branchName ? '<br><span class="small">' + escapeHtml(d.branchName) + '</span>' : '') + '</td>' +
-        '<td>' + (d.state === 'active' ? '<span class="badge online">Aktif</span>' : '<span class="badge inactive">Devre D&#305;&#351;&#305;</span>') + '</td>' +
-        '<td>' + upd + '</td>' +
-        '<td><div class="actions">' + actions + '</div></td></tr>';
-    }).join('');
-  }
-  $('moreBtn').style.display = devices.length < total ? 'inline-block' : 'none';
+  var cols = canManage ? 9 : 8;
+  $('devBody').innerHTML = devices.length ? devices.map(function(d){
+    var s = e(d.serial);
+    var gw = d.gatewayId ? '<a href="/gateways/' + e(d.gatewayId) + '" class="text-reset"><span class="status-dot st ' + (d.gatewayOnline ? 'st-active' : 'st-offline') + '"></span>' + e(d.gatewayName) + '</a>' : '<span class="badge bg-yellow-lt">atanmadı</span>';
+    var actions = '<div class="btn-list flex-nowrap"><a class="btn btn-sm btn-icon" href="/?serial=' + s + '" title="Etiket gönder" data-can="label.send"><i class="ti ti-send"></i></a>' +
+      (canManage ? '<button class="btn btn-sm btn-icon" data-act="edit" data-serial="' + s + '" title="Düzenle"><i class="ti ti-pencil"></i></button>' : '') + '</div>';
+    return '<tr>' +
+      (canManage ? '<td><input class="form-check-input m-0 align-middle" type="checkbox" data-sel="' + s + '"' + (selected.has(d.serial) ? ' checked' : '') + '></td>' : '') +
+      '<td><a href="/devices/' + s + '" class="mono fw-bold">' + s + '</a></td>' +
+      '<td>' + e(d.name || '') + (d.notes ? '<div class="small text-secondary text-truncate" style="max-width:220px">' + e(d.notes) + '</div>' : '') + '</td>' +
+      '<td class="text-secondary">' + e(d.modelName || '-') + '</td>' +
+      '<td>' + gw + '</td>' +
+      '<td>' + e(d.dealerName) + (d.branchName ? '<div class="small text-secondary">' + e(d.branchName) + '</div>' : '') + '</td>' +
+      '<td>' + (d.state === 'active' ? '<span class="badge bg-green-lt">Aktif</span>' : '<span class="badge bg-secondary-lt">Devre Dışı</span>') + '</td>' +
+      '<td>' + updateCell(d) + '</td><td>' + actions + '</td></tr>';
+  }).join('') : App.emptyRow(cols, total ? 'Filtreye uyan cihaz yok' : 'Henüz cihaz eklenmedi', 'ti-tags');
+  if (!currentUser.can['label.send']) document.querySelectorAll('#devBody [data-can="label.send"]').forEach(function(a){ a.hidden = true; });
+  $('moreWrap').hidden = devices.length >= total;
   updateBulkBar();
 }
-
 function query(offset){
   var p = ['limit=' + PAGE, 'offset=' + offset];
   if ($('fSearch').value.trim()) p.push('q=' + encodeURIComponent($('fSearch').value.trim()));
   if ($('fGateway').value) p.push('gatewayId=' + encodeURIComponent($('fGateway').value));
   if ($('fBranch').value) p.push('branchId=' + encodeURIComponent($('fBranch').value));
+  if ($('fDealer').value) p.push('dealerId=' + encodeURIComponent($('fDealer').value));
   return '/api/devices?' + p.join('&');
 }
 function refresh(){
-  return apiRequest('GET', query(0)).then(function(r){
-    devices = r.devices; total = r.total; render();
-  }).catch(function(err){ showMsg('listMsg', false, err.message); });
+  return App.apiRequest('GET', query(0)).then(function(r){ devices = r.devices; total = r.total; render(); })
+    .catch(function(err){ App.toast(err.message, 'danger'); });
 }
 $('moreBtn').addEventListener('click', function(){
-  apiRequest('GET', query(devices.length)).then(function(r){
-    devices = devices.concat(r.devices); total = r.total; render();
-  });
+  App.apiRequest('GET', query(devices.length)).then(function(r){ devices = devices.concat(r.devices); total = r.total; render(); });
 });
 var searchTimer = null;
 $('fSearch').addEventListener('input', function(){ clearTimeout(searchTimer); searchTimer = setTimeout(refresh, 300); });
-$('fGateway').addEventListener('change', refresh);
-$('fBranch').addEventListener('change', refresh);
+['fGateway', 'fBranch', 'fDealer'].forEach(function(id){ $(id).addEventListener('change', refresh); });
 
-// ---- Secim ve toplu islemler ----
+// ---------- Secim ve toplu islemler ----------
 function updateBulkBar(){
   $('selCount').textContent = selected.size;
-  $('bulkBar').classList.toggle('show', selected.size > 0);
+  $('bulkBar').hidden = selected.size === 0;
   $('checkAll').checked = devices.length > 0 && devices.every(function(d){ return selected.has(d.serial); });
 }
-$('devBody').addEventListener('change', function(e){
-  var s = e.target.dataset && e.target.dataset.sel;
+$('devBody').addEventListener('change', function(ev){
+  var s = ev.target.dataset && ev.target.dataset.sel;
   if (!s) return;
-  if (e.target.checked) selected.add(s); else selected.delete(s);
+  if (ev.target.checked) selected.add(s); else selected.delete(s);
   updateBulkBar();
 });
-$('checkAll').addEventListener('change', function(e){
-  devices.forEach(function(d){ if (e.target.checked) selected.add(d.serial); else selected.delete(d.serial); });
+$('checkAll').addEventListener('change', function(ev){
+  devices.forEach(function(d){ if (ev.target.checked) selected.add(d.serial); else selected.delete(d.serial); });
   render();
 });
 function runBulk(action, extra){
-  return apiRequest('POST', '/api/devices-bulk', Object.assign({serials: Array.from(selected), action: action}, extra || {}))
+  return App.apiRequest('POST', '/api/devices-bulk', Object.assign({serials: Array.from(selected), action: action}, extra || {}))
     .then(function(r){
-      showMsg('listMsg', true, r.affected + ' cihaz güncellendi' + (r.skipped ? ' (' + r.skipped + ' atlandı)' : '') + '.');
+      App.toast(r.affected + ' cihaz güncellendi' + (r.skipped ? ' (' + r.skipped + ' atlandı)' : '') + '.');
       selected.clear(); refresh();
-    }).catch(function(err){ showMsg('listMsg', false, err.message); });
+    }).catch(function(err){ App.toast(err.message, 'danger'); });
 }
-$('bulkBar').addEventListener('click', function(e){
-  var act = e.target.dataset && e.target.dataset.bulk;
-  if (!act) return;
+$('bulkBar').addEventListener('click', function(ev){
+  var b = ev.target.closest('[data-bulk]');
+  if (!b) return;
+  var act = b.dataset.bulk;
   if (act === 'clear'){ selected.clear(); render(); return; }
   if (act === 'assign'){
     var first = devices.filter(function(d){ return selected.has(d.serial); })[0];
-    var dealerId = first ? first.dealerId : currentUser.dealerId;
     $('assignInfo').textContent = selected.size + ' cihaz seçilen gateway\'e atanacak.';
-    fillPlacement('a', dealerId);
-    $('assignDlg').showModal();
+    fillPlacement('a', first ? first.dealerId : currentUser.dealerId);
+    App.showModal('assignModal');
     return;
   }
-  var msgs = {disable: 'devre dışı bırakılsın', enable: 'etkinleştirilsin', 'delete': 'SİLİNSİN'};
-  if (!confirm(selected.size + ' cihaz ' + msgs[act] + ' mi?')) return;
-  runBulk(act);
+  var texts = {disable: 'devre dışı bırakılsın', enable: 'etkinleştirilsin', 'delete': 'kalıcı olarak silinsin'};
+  App.confirm(selected.size + ' cihaz ' + texts[act] + ' mi?', {danger: act === 'delete', okText: act === 'delete' ? 'Sil' : 'Evet'}).then(function(ok){ if (ok) runBulk(act); });
 });
-$('assignForm').addEventListener('submit', function(e){
-  e.preventDefault();
-  $('assignDlg').close();
+$('assignForm').addEventListener('submit', function(ev){
+  ev.preventDefault();
+  App.hideModal('assignModal');
   runBulk('assign', {gatewayId: $('aGateway').value || null, branchId: $('aBranch').value || null});
 });
 
-// ---- Tek cihaz duzenleme / silme ----
+// ---------- Duzenleme ----------
 var editing = null;
-$('devBody').addEventListener('click', function(e){
-  var btn = e.target.closest('button[data-act]');
+$('devBody').addEventListener('click', function(ev){
+  var btn = ev.target.closest('button[data-act="edit"]');
   if (!btn) return;
   var d = devices.filter(function(x){ return x.serial === btn.dataset.serial; })[0];
-  if (btn.dataset.act === 'delete'){
-    if (!confirm(d.serial + ' silinsin mi?')) return;
-    apiRequest('DELETE', '/api/devices/' + d.serial).then(function(){ selected.delete(d.serial); refresh(); })
-      .catch(function(err){ showMsg('listMsg', false, err.message); });
-    return;
-  }
   editing = d;
-  $('editTitle').textContent = d.serial;
+  $('editTitle').textContent = 'Cihaz ' + d.serial;
   $('eName').value = d.name || '';
-  fillSelect($('eModel'), modelOptions(), '(belirtilmedi)', d.modelId);
+  App.fillSelect('eModel', modelOptions(), '(belirtilmedi)', d.modelId);
+  if (isSuper) App.fillSelect('eDealer', dealers, null, d.dealerId);
   fillPlacement('e', d.dealerId, d.gatewayId, d.branchId);
   $('eState').value = d.state;
   $('eNotes').value = d.notes || '';
-  $('editDlg').showModal();
+  App.showModal('editModal');
 });
-$('editForm').addEventListener('submit', function(e){
-  e.preventDefault();
-  var body = {name: $('eName').value, modelId: $('eModel').value || null, gatewayId: $('eGateway').value || null,
-              state: $('eState').value, notes: $('eNotes').value};
+$('eDealer').addEventListener('change', function(){ fillPlacement('e', $('eDealer').value); });
+$('editForm').addEventListener('submit', function(ev){
+  ev.preventDefault();
+  var body = {name: $('eName').value, modelId: $('eModel').value || null, gatewayId: $('eGateway').value || null, state: $('eState').value, notes: $('eNotes').value};
+  if (isSuper) body.dealerId = $('eDealer').value;
   if (!currentUser.branchId) body.branchId = $('eBranch').value || null;
-  apiRequest('POST', '/api/devices/' + editing.serial, body).then(function(){ $('editDlg').close(); hideMsg('listMsg'); refresh(); })
-    .catch(function(err){ $('editDlg').close(); showMsg('listMsg', false, err.message); });
+  App.apiRequest('POST', '/api/devices/' + editing.serial, body).then(function(){ App.hideModal('editModal'); App.toast('Cihaz güncellendi.'); refresh(); })
+    .catch(function(err){ App.toast(err.message, 'danger'); });
 });
-document.querySelectorAll('[data-close]').forEach(function(b){ b.addEventListener('click', function(){ b.closest('dialog').close(); }); });
 
-// ---- Tek cihaz ekleme (elle / barkod okuyucu / kamera) ----
-$('addForm').addEventListener('submit', function(e){
-  e.preventDefault();
-  var serial = $('addSerial').value.replace(/\s+/g, '');
-  if (!/^\d{8}$/.test(serial)){ showMsg('addMsg', false, 'HATA: Seri numarası 8 haneli olmalı.'); return; }
+// ---------- Tek cihaz ekleme ----------
+$('openAddBtn').addEventListener('click', function(){ App.hideMsg('addMsg'); $('addedList').innerHTML = ''; App.showModal('addModal'); setTimeout(function(){ $('addSerial').focus(); }, 400); });
+$('addSerial').addEventListener('input', function(){ this.value = this.value.replace(/\D/g, '').slice(0, 8); });
+$('addForm').addEventListener('submit', function(ev){
+  ev.preventDefault();
+  var serial = $('addSerial').value;
+  if (!/^\d{8}$/.test(serial)){ App.showMsg('addMsg', false, 'Seri numarası 8 haneli olmalı.'); return; }
   var body = {serial: serial, name: $('addName').value, modelId: $('addModel').value || null, gatewayId: $('addGateway').value || null};
   if (isSuper) body.dealerId = $('addDealer').value || null;
   if (!currentUser.branchId) body.branchId = $('addBranch').value || null;
-  apiRequest('POST', '/api/devices', body).then(function(d){
-    showMsg('addMsg', true, d.serial + ' eklendi' + (d.gatewayName ? ' (' + d.gatewayName + ')' : '') + '.');
-    if ($('rapidMode').checked){ $('addSerial').value = ''; $('addName').value = ''; }
-    else e.target.reset();
-    $('addSerial').focus();
+  var btn = $('addBtn'); App.setBusy(btn, true);
+  App.apiRequest('POST', '/api/devices', body).then(function(d){
+    App.hideMsg('addMsg');
+    $('addedList').insertAdjacentHTML('afterbegin', '<span class="badge bg-green-lt me-1 mb-1"><i class="ti ti-check me-1"></i>' + e(d.serial) + (d.name ? ' · ' + e(d.name) : '') + '</span>');
+    if ($('rapidMode').checked){ $('addSerial').value = ''; $('addName').value = ''; $('addSerial').focus(); }
+    else { App.hideModal('addModal'); App.toast(d.serial + ' eklendi.'); }
     refresh();
-  }).catch(function(err){ showMsg('addMsg', false, err.message); $('addSerial').select(); });
+  }).catch(function(err){ App.showMsg('addMsg', false, err.message); $('addSerial').select(); })
+    .then(function(){ App.setBusy(btn, false); });
 });
-
 var scanner = null;
+function stopScanner(){
+  if (!scanner) return Promise.resolve();
+  var s = scanner; scanner = null;
+  return s.stop().then(function(){ s.clear(); }).catch(function(){});
+}
 $('scanBtn').addEventListener('click', function(){
-  if (typeof Html5Qrcode === 'undefined'){ showMsg('addMsg', false, 'Kamera kütüphanesi yüklenemedi.'); return; }
-  if (scanner){ scanner.stop().then(function(){ scanner.clear(); scanner = null; $('scanBtn').textContent = '📷 Kamera ile Oku'; }); return; }
+  if (scanner){ stopScanner(); return; }
+  if (typeof Html5Qrcode === 'undefined'){ App.showMsg('addMsg', false, 'Kamera kütüphanesi yüklenemedi.'); return; }
   scanner = new Html5Qrcode('scanner');
-  $('scanBtn').textContent = 'Kamerayı Kapat';
-  scanner.start({facingMode: 'environment'}, {fps: 10, qrbox: {width: 260, height: 160}}, function(text){
+  scanner.start({facingMode: 'environment'}, {fps: 10, qrbox: {width: 260, height: 150}}, function(text){
     var m = String(text).match(/\d{8}/);
-    if (!m) return;
-    if ($('addSerial').value === m[0]) return;
+    if (!m || $('addSerial').value === m[0]) return;
     $('addSerial').value = m[0];
     if (navigator.vibrate) navigator.vibrate(80);
     $('addForm').requestSubmit();
-  }).catch(function(err){
-    showMsg('addMsg', false, 'Kamera açılamadı: ' + err);
-    scanner = null; $('scanBtn').textContent = '📷 Kamera ile Oku';
-  });
+  }).catch(function(err){ App.showMsg('addMsg', false, 'Kamera açılamadı: ' + err); scanner = null; });
 });
+$('addModal').addEventListener('hidden.bs.modal', stopScanner);
 
-// ---- Toplu ekleme ----
+// ---------- Toplu ekleme ----------
 var bulkRows = [];
 function cell(row, names){
   var keys = Object.keys(row);
-  for (var i = 0; i < names.length; i++){
-    for (var j = 0; j < keys.length; j++){
-      if (keys[j].trim().toLocaleLowerCase('tr') === names[i]) return String(row[keys[j]] == null ? '' : row[keys[j]]).trim();
-    }
-  }
+  for (var i = 0; i < names.length; i++) for (var j = 0; j < keys.length; j++)
+    if (keys[j].trim().toLocaleLowerCase('tr') === names[i]) return String(row[keys[j]] == null ? '' : row[keys[j]]).trim();
   return '';
 }
 function rowsFromSheet(json){
   return json.map(function(r){
-    return {
-      serial: cell(r, ['seri no', 'seri', 'serial', 'seri numarası', 'cihaz id', 'id']),
-      name: cell(r, ['isim', 'ad', 'name', 'konum', 'isim / konum']),
-      model: cell(r, ['model', 'ekran modeli', 'ekran']),
-      gateway: cell(r, ['gateway']),
-      branch: cell(r, ['şube', 'sube', 'branch'])
-    };
+    return {serial: cell(r, ['seri no', 'seri', 'serial', 'seri numarası', 'cihaz id', 'id']), name: cell(r, ['isim', 'ad', 'name', 'konum', 'isim / konum']),
+            model: cell(r, ['model', 'ekran modeli', 'ekran']), gateway: cell(r, ['gateway']), branch: cell(r, ['şube', 'sube', 'branch'])};
   }).filter(function(r){ return r.serial || r.name; });
 }
 function rowsFromText(text){
   return text.split(/\r?\n/).map(function(l){ return l.trim(); }).filter(Boolean).map(function(l){
-    var parts = l.split(/[;\t,]/);
-    return {serial: parts[0].trim(), name: (parts[1] || '').trim()};
+    var p = l.split(/[;\t,]/); return {serial: p[0].trim(), name: (p[1] || '').trim()};
   });
 }
 function collectBulkRows(){
   var file = $('bulkFile').files[0];
   if (!file) return Promise.resolve(rowsFromText($('bulkText').value));
-  if (typeof XLSX === 'undefined') return Promise.reject(new Error('Excel kütüphanesi yüklenemedi.'));
   return new Promise(function(resolve, reject){
     var reader = new FileReader();
-    reader.onload = function(e){
+    reader.onload = function(ev){
       try {
-        var wb = XLSX.read(new Uint8Array(e.target.result), {type: 'array', raw: false});
+        var wb = XLSX.read(new Uint8Array(ev.target.result), {type: 'array', raw: false});
         resolve(rowsFromSheet(XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], {defval: '', raw: false})));
       } catch (err){ reject(err); }
     };
@@ -385,84 +363,76 @@ function bulkDefaults(){
   return d;
 }
 function showReport(r){
-  $('bulkReportWrap').style.display = 'block';
+  $('bulkReportWrap').hidden = false;
   $('bulkReport').innerHTML = r.rows.map(function(x){
-    return '<tr><td>' + x.row + '</td><td class="mono">' + escapeHtml(x.serial) + '</td><td>' + escapeHtml(x.name || '') + '</td>' +
-      '<td>' + escapeHtml(x.gatewayName || '-') + '</td><td>' + escapeHtml(x.branchName || '-') + '</td>' +
-      '<td class="' + (x.ok ? 'upd-ok' : 'upd-err') + '">' + escapeHtml(x.message) + '</td></tr>';
+    return '<tr><td>' + x.row + '</td><td class="mono">' + e(x.serial) + '</td><td>' + e(x.name || '') + '</td><td>' + e(x.gatewayName || '-') + '</td><td>' + e(x.branchName || '-') + '</td>' +
+      '<td>' + (x.ok ? '<span class="text-success"><i class="ti ti-check me-1"></i>' : '<span class="text-danger"><i class="ti ti-x me-1"></i>') + e(x.message) + '</span></td></tr>';
   }).join('');
 }
+$('openBulkBtn').addEventListener('click', function(){ App.showModal('bulkModal'); });
 $('bulkCheckBtn').addEventListener('click', function(){
-  $('bulkCommitBtn').style.display = 'none';
+  $('bulkCommitBtn').hidden = true;
+  var btn = this; App.setBusy(btn, true);
   collectBulkRows().then(function(rows){
     bulkRows = rows;
     if (!rows.length) throw new Error('Eklenecek satır bulunamadı.');
-    return apiRequest('POST', '/api/devices/import', {rows: rows, defaults: bulkDefaults(), dryRun: true});
+    return App.apiRequest('POST', '/api/devices/import', {rows: rows, defaults: bulkDefaults(), dryRun: true});
   }).then(function(r){
     showReport(r);
-    showMsg('bulkMsg', r.valid > 0, r.total + ' satır kontrol edildi: ' + r.valid + ' geçerli, ' + r.invalid + ' hatalı.');
-    if (r.valid){
-      $('bulkCommitBtn').textContent = 'Geçerli ' + r.valid + ' cihazı ekle';
-      $('bulkCommitBtn').style.display = 'inline-block';
-    }
-  }).catch(function(err){ showMsg('bulkMsg', false, err.message); });
+    App.showMsg('bulkMsg', r.valid > 0, r.total + ' satır kontrol edildi: ' + r.valid + ' geçerli, ' + r.invalid + ' hatalı.');
+    if (r.valid){ $('bulkCommitBtn').innerHTML = '<i class="ti ti-check me-1"></i>Geçerli ' + r.valid + ' cihazı ekle'; $('bulkCommitBtn').hidden = false; }
+  }).catch(function(err){ App.showMsg('bulkMsg', false, err.message); })
+    .then(function(){ App.setBusy(btn, false); });
 });
 $('bulkCommitBtn').addEventListener('click', function(){
-  $('bulkCommitBtn').style.display = 'none';
-  apiRequest('POST', '/api/devices/import', {rows: bulkRows, defaults: bulkDefaults(), dryRun: false}).then(function(r){
+  var btn = this; App.setBusy(btn, true);
+  App.apiRequest('POST', '/api/devices/import', {rows: bulkRows, defaults: bulkDefaults(), dryRun: false}).then(function(r){
     showReport(r);
-    showMsg('bulkMsg', true, r.valid + ' cihaz eklendi' + (r.invalid ? ', ' + r.invalid + ' satır atlandı' : '') + '.');
-    $('bulkFile').value = ''; $('bulkText').value = '';
+    App.showMsg('bulkMsg', true, r.valid + ' cihaz eklendi' + (r.invalid ? ', ' + r.invalid + ' satır atlandı' : '') + '.');
+    $('bulkFile').value = ''; $('bulkText').value = ''; btn.hidden = true;
     refresh();
-  }).catch(function(err){ showMsg('bulkMsg', false, err.message); });
+  }).catch(function(err){ App.showMsg('bulkMsg', false, err.message); })
+    .then(function(){ App.setBusy(btn, false); });
 });
-$('bulkTemplateBtn').addEventListener('click', function(){
-  if (typeof XLSX === 'undefined'){ alert('Excel kütüphanesi yüklenemedi.'); return; }
+$('bulkTemplateBtn').addEventListener('click', function(ev){
+  ev.preventDefault();
   var rows = [['Seri No', 'İsim', 'Model', 'Gateway', 'Şube'], ['80156767', 'Raf 1 - Çay', 'EPD213-BW', '', ''], ['80156768', 'Tezgah 1', 'EPD42-BW', '', '']];
   var ws = XLSX.utils.aoa_to_sheet(rows);
   ws['!cols'] = [{wch: 12}, {wch: 24}, {wch: 14}, {wch: 20}, {wch: 18}];
-  var wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, 'Cihazlar');
+  var wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, 'Cihazlar');
   XLSX.writeFile(wb, 'cihaz_ekleme_sablonu.xlsx');
 });
 
-document.querySelectorAll('.tabs button').forEach(function(b){
-  b.addEventListener('click', function(){
-    document.querySelectorAll('.tabs button').forEach(function(x){ x.classList.toggle('active', x === b); });
-    $('tab-single').style.display = b.dataset.tab === 'single' ? 'block' : 'none';
-    $('tab-bulk').style.display = b.dataset.tab === 'bulk' ? 'block' : 'none';
-  });
-});
-
-// ---- Baslangic ----
-meReady.then(function(me){
+// ---------- Baslangic ----------
+App.meReady.then(function(me){
   canManage = me.can['device.manage'];
   isSuper = me.role === 'super_admin';
-  if (!canManage) document.querySelectorAll('.manage-col').forEach(function(el){ el.style.display = 'none'; });
-  if (!isSuper) document.querySelectorAll('.dealer-field').forEach(function(el){ el.style.display = 'none'; });
-  if (me.branchId) document.querySelectorAll('.branch-field').forEach(function(el){ el.style.display = 'none'; });
+  isCentral = me.role === 'super_admin' || me.role === 'support';
+  if (!canManage) document.querySelectorAll('.manage-col').forEach(function(el){ el.hidden = true; });
+  if (!isSuper) document.querySelectorAll('.dealer-field').forEach(function(el){ el.hidden = true; });
+  if (me.branchId) document.querySelectorAll('.branch-field').forEach(function(el){ el.hidden = true; });
   return Promise.all([
-    apiRequest('GET', '/api/gateways'), apiRequest('GET', '/api/branches'),
-    apiRequest('GET', '/api/screen-models'), isSuper ? apiRequest('GET', '/api/dealers') : Promise.resolve([])
+    App.apiRequest('GET', '/api/gateways'), App.apiRequest('GET', '/api/branches'),
+    App.apiRequest('GET', '/api/screen-models'), App.apiRequest('GET', '/api/dealers')
   ]).then(function(r){
     gateways = r[0]; branches = r[1]; models = r[2]; dealers = r[3];
-    var gwFilter = [{id: 'none', name: '(gateway atanmamış)'}].concat(gwOptions(gatewaysOf(null)));
-    fillSelect($('fGateway'), gwFilter, 'Tüm gateway\'ler', new URLSearchParams(location.search).get('gatewayId'));
-    fillSelect($('fBranch'), branches.map(function(b){ return {id: b.id, name: (isSuper ? b.dealer_name + ' / ' : '') + b.name}; }), 'Tüm şubeler');
-    fillSelect($('addModel'), modelOptions(), '(belirtilmedi)');
-    fillSelect($('bulkModel'), modelOptions(), '(belirtilmedi)');
+    App.fillSelect('fGateway', [{id: 'none', name: '(gateway atanmamış)'}].concat(gwOptions(gatewaysOf(null))), 'Tüm gateway\'ler', App.qs('gatewayId'));
+    App.fillSelect('fBranch', branches.map(function(b){ return {id: b.id, name: (isCentral ? b.dealer_name + ' / ' : '') + b.name}; }), 'Tüm şubeler', App.qs('branchId'));
+    if (isCentral){ $('fDealerWrap').hidden = false; App.fillSelect('fDealer', dealers, 'Tüm bayiler', App.qs('dealerId')); }
+    App.fillSelect('addModel', modelOptions(), '(belirtilmedi)');
+    App.fillSelect('bulkModel', modelOptions(), '(belirtilmedi)');
     if (isSuper){
-      fillSelect($('addDealer'), dealers, 'Bayi seçin');
-      fillSelect($('bulkDealer'), dealers, 'Bayi seçin');
+      App.fillSelect('addDealer', dealers, 'Bayi seçin'); App.fillSelect('bulkDealer', dealers, 'Bayi seçin');
       $('addDealer').addEventListener('change', function(){ fillPlacement('add', $('addDealer').value); });
       $('bulkDealer').addEventListener('change', function(){ fillPlacement('bulk', $('bulkDealer').value); });
-      fillPlacement('add', ''); fillPlacement('bulk', '');
+      fillPlacement('add', '-'); fillPlacement('bulk', '-');
     } else {
       fillPlacement('add', me.dealerId); fillPlacement('bulk', me.dealerId);
     }
-    if (canManage) $('addCard').style.display = 'block';
+    if (App.qs('add') === '1' && canManage) $('openAddBtn').click();
     return refresh();
   });
 });
 </script>
-</body></html>
+</body>
+</html>

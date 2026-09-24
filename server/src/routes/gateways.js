@@ -48,12 +48,15 @@ function view(gw, user) {
   const v = {
     id: gw.id,
     name: gw.name,
+    location: gw.location,
+    notes: gw.notes,
     state: gw.state,
     status,
     statusLabel: hub.STATUS_LABELS[status],
     online,
     dealerId: gw.dealer_id,
     dealerName: gw.dealer_name || null,
+    dealerActive: gw.dealer_active !== false,
     branchId: gw.branch_id,
     branchName: gw.branch_name || null,
     fw: gw.fw_version,
@@ -76,7 +79,7 @@ function view(gw, user) {
   return v;
 }
 
-const SELECT_GW = `SELECT g.*, d.name AS dealer_name, b.name AS branch_name,
+const SELECT_GW = `SELECT g.*, d.name AS dealer_name, d.active AS dealer_active, b.name AS branch_name,
                           (SELECT count(*)::int FROM devices dv WHERE dv.gateway_id = g.id) AS device_count
                      FROM gateways g
                      LEFT JOIN dealers d ON d.id = g.dealer_id
@@ -115,11 +118,64 @@ async function validateBranch(branchId, dealerId) {
   if (!b) fail(400, 'Secilen sube bu bayiye ait degil.');
 }
 
+// Bayinin lisansli gateway sayisi (max_gateways) asilmasin.
+async function ensureGatewayQuota(dealerId, excludeId) {
+  const d = await db.one(
+    'SELECT max_gateways, (SELECT count(*)::int FROM gateways WHERE dealer_id = $1 AND id <> $2) AS used FROM dealers WHERE id = $1',
+    [dealerId, excludeId || ''],
+  );
+  if (d && d.max_gateways != null && d.used >= d.max_gateways) {
+    fail(400, `Bayinin gateway limiti dolu (${d.used}/${d.max_gateways}). Limit icin merkezle iletisime gecin.`);
+  }
+}
+
+// ?dealerId= ?branchId= filtreleri (kapsam her zaman uygulanir)
 api.get('/gateways', auth.requireApi('gateway.view'), async (req, res) => {
   const params = [];
-  const where = scopeSql(req.user, 'g', params);
-  const rows = await db.many(`${SELECT_GW} WHERE ${where} ORDER BY d.name NULLS FIRST, lower(g.name)`, params);
+  const conds = [scopeSql(req.user, 'g', params)];
+  const dealerId = optionalId(req.query.dealerId, 'Bayi');
+  if (dealerId) { params.push(dealerId); conds.push(`g.dealer_id = $${params.length}`); }
+  const branchId = optionalId(req.query.branchId, 'Sube');
+  if (branchId) { params.push(branchId); conds.push(`g.branch_id = $${params.length}`); }
+  const rows = await db.many(`${SELECT_GW} WHERE ${conds.join(' AND ')} ORDER BY d.name NULLS FIRST, lower(g.name)`, params);
   res.json(rows.map((g) => view(g, req.user)));
+});
+
+// Detay: gateway bilgisi + son baglanti olaylari.
+api.get('/gateways/:id', auth.requireApi('gateway.view'), async (req, res) => {
+  const gw = await loadScoped(req);
+  const events = await db.many(
+    'SELECT event, ip, detail, created_at FROM gateway_events WHERE gateway_id = $1 ORDER BY id DESC LIMIT 100',
+    [gw.id],
+  );
+  res.json({ ...view(gw, req.user), events });
+});
+
+// Isim, konum ve not.
+api.post('/gateways/:id/info', auth.requireApi('gateway.manage'), async (req, res) => {
+  const gw = await loadScoped(req);
+  const name = req.body.name !== undefined ? cleanName(req.body.name, 'Isim') : gw.name;
+  const location = req.body.location !== undefined ? (String(req.body.location).trim().slice(0, 200) || null) : gw.location;
+  const notes = req.body.notes !== undefined ? (String(req.body.notes).trim().slice(0, 2000) || null) : gw.notes;
+  const row = await db.one('UPDATE gateways SET name = $2, location = $3, notes = $4 WHERE id = $1 RETURNING *', [gw.id, name, location, notes]);
+  await logGw(req.user, 'gateway.updated', row, { details: { before: { name: gw.name, location: gw.location }, after: { name, location } } });
+  if (name !== gw.name) await hub.notifyStatus(gw.id);
+  res.json(await freshView(row, req.user));
+});
+
+// Ariza/degisim: bu gateway'e bagli tum cihazlari baska bir gateway'e tasi.
+api.post('/gateways/:id/move-devices', auth.requireApi('gateway.assign'), async (req, res) => {
+  const gw = await loadScoped(req);
+  const target = await loadGateway(req.body.targetGatewayId);
+  if (!target || !inScope(req.user, target)) fail(400, 'Hedef gateway bulunamadi.');
+  if (target.id === gw.id) fail(400, 'Hedef gateway ayni olamaz.');
+  if (target.dealer_id !== gw.dealer_id) fail(400, 'Cihazlar sadece ayni bayideki bir gateway\'e tasinabilir.');
+  const r = await db.query(
+    'UPDATE devices SET gateway_id = $2, branch_id = COALESCE($3, branch_id) WHERE gateway_id = $1 RETURNING id',
+    [gw.id, target.id, target.branch_id],
+  );
+  await logGw(req.user, 'gateway.devices_moved', gw, { message: `${r.rowCount} cihaz -> ${target.name}`, details: { target: target.id, serials: r.rows.map((x) => x.id).slice(0, 1000) } });
+  res.json({ ok: true, moved: r.rowCount });
 });
 
 // Merkez: MAC ile elle kayit (gateway henuz hic baglanmamis olabilir).
@@ -190,6 +246,7 @@ api.post('/gateways/claim', auth.requireApi('gateway.claim'), async (req, res) =
 
   const branchId = user.branch_id || optionalId(req.body.branchId, 'Sube');
   await validateBranch(branchId, user.dealer_id);
+  await ensureGatewayQuota(user.dealer_id, gw.id);
   const name = String(req.body.name || '').trim().slice(0, 60) || gw.name;
   const row = await db.one(
     `UPDATE gateways SET dealer_id = $2, branch_id = $3, name = $4, state = $5, claim_code = NULL,
@@ -211,8 +268,17 @@ api.post('/gateways/:id/assign', auth.requireApi('gateway.assign'), async (req, 
   if (user.role === 'super_admin' && req.body.dealerId !== undefined) dealerId = optionalId(req.body.dealerId, 'Bayi');
   const branchId = dealerId ? optionalId(req.body.branchId, 'Sube') : null;
 
+  // Bayi degisirse (veya gateway serbest birakilirsa) eski bayinin cihazlari
+  // bu gateway'den ayrilir; cihaz kayitlari bayide kalir.
+  let detached = 0;
+  const detachForeignDevices = async () => {
+    const r = await db.query('UPDATE devices SET gateway_id = NULL WHERE gateway_id = $1 AND dealer_id IS DISTINCT FROM $2', [gw.id, dealerId]);
+    detached = r.rowCount;
+  };
+
   let row;
   if (!dealerId) {
+    await detachForeignDevices();
     row = await db.one(
       `UPDATE gateways SET dealer_id = NULL, branch_id = NULL, activated_at = NULL,
                            state = CASE WHEN state = 'disabled' THEN 'disabled' ELSE 'registered' END,
@@ -224,6 +290,10 @@ api.post('/gateways/:id/assign', auth.requireApi('gateway.assign'), async (req, 
     if (!(await db.one('SELECT id FROM dealers WHERE id = $1', [dealerId]))) fail(404, 'Bayi bulunamadi.');
     await validateBranch(branchId, dealerId);
     const dealerChanged = dealerId !== gw.dealer_id;
+    if (dealerChanged) {
+      await ensureGatewayQuota(dealerId, gw.id);
+      await detachForeignDevices();
+    }
     const state = gw.state === 'disabled' ? 'disabled' : (dealerChanged || gw.state === 'pending' || gw.state === 'registered') ? assignedState({ ...gw, activated_at: null }) : gw.state;
     row = await db.one(
       `UPDATE gateways SET dealer_id = $2, branch_id = $3, state = $4, claim_code = NULL,
@@ -233,10 +303,11 @@ api.post('/gateways/:id/assign', auth.requireApi('gateway.assign'), async (req, 
     );
   }
   await logGw(user, 'gateway.assigned', row, {
+    message: detached ? `${detached} cihaz gateway'den ayrildi` : null,
     details: { before: { dealerId: gw.dealer_id, branchId: gw.branch_id }, after: { dealerId: row.dealer_id, branchId: row.branch_id } },
   });
   await hub.notifyStatus(gw.id);
-  res.json(await freshView(row, user));
+  res.json({ ...(await freshView(row, user)), detachedDevices: detached });
 });
 
 api.post('/gateways/:id/rename', auth.requireApi('gateway.manage'), async (req, res) => {

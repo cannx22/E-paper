@@ -1,60 +1,61 @@
-<!DOCTYPE html><html lang="tr"><head><meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Gateway Ekle</title>
-<link rel="stylesheet" href="/static/admin.css">
-</head><body>
-<div class="banner">
-  <span class="tag">&#128225;</span>
-  <div>
-    <h1>Gateway Ekle</h1>
-    <p>QR kodu okuttu&#287;unuz gateway'i hesab&#305;n&#305;za ekleyin.</p>
-  </div>
-  <nav id="nav" class="nav-links"></nav>
-</div>
-<div class="wrap" style="max-width:560px;">
-  <section class="card">
-    <h2>Gateway Bilgileri</h2>
-    <form id="claimForm">
-      <label for="claimId">Gateway Kimli&#287;i (MAC)</label>
-      <input type="text" id="claimId" required>
-      <label for="claimCode">Sahiplenme Kodu</label>
-      <input type="text" id="claimCode" required>
-      <label for="claimName">&#304;sim (&ouml;rnek: Kasa Yan&#305;)</label>
-      <input type="text" id="claimName" maxlength="60">
-      <div id="claimBranchWrap"><label for="claimBranch">&#350;ube</label><select id="claimBranch"></select></div>
-      <button type="submit" class="btn-primary" style="width:100%;">Gateway'i Hesab&#305;ma Ekle</button>
-    </form>
-    <div id="claimMsg" class="msg"></div>
-  </section>
-</div>
-<script src="/static/common.js"></script>
+<script src="/static/theme-boot.js"></script>
+<link rel="stylesheet" href="/vendor/tabler/css/tabler.min.css">
+<link rel="stylesheet" href="/vendor/tabler-icons/tabler-icons.min.css">
+<link rel="stylesheet" href="/static/app.css">
+</head>
+<body>
+<div class="page">
+<div id="app-sidebar"></div>
+<div class="page-wrapper">
+  <div class="page-header d-print-none"><div class="container-xl">
+    <div class="page-pretitle">QR ile sahiplenme</div><h2 class="page-title"><i class="ti ti-qrcode me-2"></i>Gateway Ekle</h2>
+  </div></div>
+  <div class="page-body"><div class="container-xl">
+    <div class="row justify-content-center"><div class="col-md-7 col-lg-5">
+      <div class="card">
+        <div class="card-body">
+          <p class="text-secondary">Okuttuğunuz gateway'i hesabınıza eklemek için bilgileri kontrol edip onaylayın.</p>
+          <form id="claimForm">
+            <div class="mb-3"><label class="form-label required">Gateway Kimliği (MAC)</label><input class="form-control mono" id="claimId" required></div>
+            <div class="mb-3"><label class="form-label required">Sahiplenme Kodu</label><input class="form-control mono" id="claimCode" required></div>
+            <div class="mb-3"><label class="form-label">İsim</label><input class="form-control" id="claimName" maxlength="60" placeholder="Kasa arkası"></div>
+            <div class="mb-3" id="claimBranchWrap"><label class="form-label">Şube</label><select class="form-select" id="claimBranch"></select></div>
+            <button type="submit" class="btn btn-primary w-100" id="claimBtn"><i class="ti ti-check me-1"></i>Hesabıma Ekle</button>
+          </form>
+          <div id="claimMsg" hidden></div>
+        </div>
+      </div>
+    </div></div>
+  </div></div>
+</div></div>
+<script src="/vendor/tabler/js/tabler.min.js"></script>
+<script src="/static/app.js"></script>
 <script>
-var params = new URLSearchParams(location.search);
-document.getElementById('claimId').value = params.get('gw') || '';
-document.getElementById('claimCode').value = params.get('code') || '';
-
-meReady.then(function(me){
-  if (me.branchId){
-    document.getElementById('claimBranchWrap').style.display = 'none';
-    return;
-  }
-  return apiRequest('GET', '/api/branches').then(function(list){
-    fillSelect(document.getElementById('claimBranch'), list, '(şube yok / bayi seviyesi)');
+document.getElementById('claimId').value = App.qs('gw') || '';
+document.getElementById('claimCode').value = App.qs('code') || '';
+App.meReady.then(function(me){
+  if (me.branchId){ document.getElementById('claimBranchWrap').hidden = true; return; }
+  return App.apiRequest('GET', '/api/branches').then(function(list){
+    App.fillSelect('claimBranch', list.map(function(b){ return {id: b.id, name: b.name}; }), '(şube yok / bayi seviyesi)');
   });
 });
-
-document.getElementById('claimForm').addEventListener('submit', function(e){
-  e.preventDefault();
-  apiRequest('POST', '/api/gateways/claim', {
-    id: document.getElementById('claimId').value,
-    code: document.getElementById('claimCode').value,
-    name: document.getElementById('claimName').value,
-    branchId: document.getElementById('claimBranch').value || null
+document.getElementById('claimForm').addEventListener('submit', function(ev){
+  ev.preventDefault();
+  var btn = document.getElementById('claimBtn'); App.setBusy(btn, true);
+  App.apiRequest('POST', '/api/gateways/claim', {
+    id: document.getElementById('claimId').value, code: document.getElementById('claimCode').value,
+    name: document.getElementById('claimName').value, branchId: document.getElementById('claimBranch').value || null
   }).then(function(g){
-    showMsg('claimMsg', true, g.name + ' hesabınıza eklendi. Durum: ' + g.statusLabel +
+    App.showMsg('claimMsg', true, g.name + ' hesabınıza eklendi. Durum: ' + g.statusLabel +
       (g.status === 'awaiting' ? '\nGateway\'i elektriğe takıp WiFi kurulumunu yapın; internete bağlanınca Aktif olacak.' : ''));
-    setTimeout(function(){ location.href = '/gateways'; }, 3000);
-  }).catch(function(err){ showMsg('claimMsg', false, err.message); });
+    setTimeout(function(){ location.href = '/gateways/' + encodeURIComponent(g.id); }, 2500);
+  }).catch(function(err){ App.setBusy(btn, false); App.showMsg('claimMsg', false, err.message); });
 });
 </script>
-</body></html>
+</body>
+</html>
