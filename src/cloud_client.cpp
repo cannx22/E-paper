@@ -1,6 +1,7 @@
 #include "cloud_client.h"
 #include <WiFi.h>
 #include <WebSocketsClient.h>
+#include "image_sender.h"
 
 static const char *DEFAULT_WS_PATH = "/ws/gateway";
 static const uint32_t RECONNECT_INTERVAL_MS = 5000;
@@ -23,6 +24,29 @@ static unsigned long g_lastTelemetryMillis = 0;
 static JsonDocument g_pendingJob;
 static bool g_hasPendingJob = false;
 static String g_pendingCommand;
+
+// Resim modu: "send_image" mesajindan sonra gelen ikili parcalar burada
+// birlestirilir; tamamlaninca CloudClient_Loop() icinde nRF ile gonderilir.
+static CloudImageHandler g_onImage = nullptr;
+struct PendingImage {
+    String reqId;
+    String serial;
+    uint8_t *buf = nullptr;
+    size_t size = 0;
+    size_t received = 0;
+    bool ready = false;   // tum veri geldi, gonderilmeyi bekliyor
+};
+static PendingImage g_img;
+static bool g_inImageSend = false;
+
+static void freeImage() {
+    if (g_img.buf) free(g_img.buf);
+    g_img = PendingImage();
+}
+
+static bool isBusy() {
+    return g_hasPendingJob || g_img.buf != nullptr || g_inImageSend;
+}
 
 bool CloudClient_ParseUrl(const String &url, bool &tls, String &host, uint16_t &port, String &path) {
     String rest;
@@ -111,8 +135,39 @@ static void handleMessage(uint8_t *payload, size_t length) {
         Serial.print(" - isim: ");
         Serial.println(name);
         if (type == "hello_ack") g_telemetryDue = true;
+    } else if (type == "send_image") {
+        String reqId = doc["reqId"] | "";
+        size_t size = doc["size"] | 0;
+        if (isBusy()) {
+            sendResult(reqId, false, "HATA: Gateway mesgul, onceki gonderim suruyor.");
+            return;
+        }
+        if (!g_onImage) {
+            sendResult(reqId, false, "HATA: Bu gateway firmware'i resim modunu desteklemiyor.");
+            return;
+        }
+        if (size < IMG_HEADER_LEN || size > IMG_MAX_BLOB) {
+            sendResult(reqId, false, "HATA: Goruntu boyutu gecersiz (" + String((unsigned)size) + " byte).");
+            return;
+        }
+        uint8_t *buf = (uint8_t *)malloc(size);
+        if (!buf) {
+            sendResult(reqId, false, "HATA: Gateway bellegi yetersiz (" + String((unsigned)size) + " byte, bos " + String(ESP.getMaxAllocHeap()) + ").");
+            return;
+        }
+        g_img.reqId = reqId;
+        g_img.serial = doc["serial"] | "";
+        g_img.buf = buf;
+        g_img.size = size;
+        g_img.received = 0;
+        g_img.ready = false;
+        Serial.print("[bulut] resim istegi: seri ");
+        Serial.print(g_img.serial);
+        Serial.print(", ");
+        Serial.print((unsigned)size);
+        Serial.println(" byte bekleniyor.");
     } else if (type == "send") {
-        if (g_hasPendingJob) {
+        if (isBusy()) {
             sendResult(doc["reqId"] | "", false, "HATA: Gateway mesgul, onceki gonderim suruyor.");
             return;
         }
@@ -147,6 +202,29 @@ static void onEvent(WStype_t type, uint8_t *payload, size_t length) {
         case WStype_DISCONNECTED:
             if (g_connected) Serial.println("[bulut] sunucu baglantisi koptu, yeniden denenecek.");
             g_connected = false;
+            // Yarim kalan resim aktarimi gecersiz; sunucu isi tekrar siraya alir.
+            if (g_img.buf && !g_inImageSend) freeImage();
+            break;
+        case WStype_BIN:
+            if (!g_img.buf || g_img.ready) {
+                Serial.println("[bulut] beklenmeyen ikili veri, atlandi.");
+                break;
+            }
+            if (g_img.received + length > g_img.size) {
+                Serial.println("[bulut] resim verisi beklenenden uzun, iptal.");
+                sendResult(g_img.reqId, false, "HATA: Goruntu verisi beklenenden uzun geldi.");
+                freeImage();
+                break;
+            }
+            memcpy(g_img.buf + g_img.received, payload, length);
+            g_img.received += length;
+            if (g_img.received == g_img.size) {
+                g_img.ready = true;
+                JsonDocument ack;
+                ack["type"] = "ack";
+                ack["reqId"] = g_img.reqId;
+                sendJson(ack);
+            }
             break;
         case WStype_TEXT:
             handleMessage(payload, length);
@@ -203,6 +281,16 @@ void CloudClient_Loop() {
         sendResult(reqId, ok, message);
     }
 
+    if (g_img.ready && !g_inImageSend) {
+        String reqId = g_img.reqId;
+        String message;
+        g_inImageSend = true;
+        bool ok = g_onImage ? g_onImage(g_img.serial, g_img.buf, g_img.size, message) : false;
+        g_inImageSend = false;
+        freeImage();
+        sendResult(reqId, ok, message);
+    }
+
     if (g_connected && (g_telemetryDue || millis() - g_lastTelemetryMillis > TELEMETRY_INTERVAL_MS)) {
         g_telemetryDue = false;
         sendTelemetry();
@@ -213,6 +301,14 @@ void CloudClient_Loop() {
         g_pendingCommand = "";
         if (g_onCommand) g_onCommand(command);
     }
+}
+
+void CloudClient_SetImageHandler(CloudImageHandler onImage) {
+    g_onImage = onImage;
+}
+
+void CloudClient_Poll() {
+    ws.loop();
 }
 
 bool CloudClient_IsConnected() {

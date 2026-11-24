@@ -19,6 +19,7 @@ sadece WiFi kurulum hotspot'u kalır. Yeni özellikler sunucu arayüzüne ve API
 | `server/src/db/migrations/` | Sıralı SQL migration'ları (`00N_ad.sql`). Açılışta otomatik uygulanır. |
 | `server/public/` | Sayfalar (düz HTML + JS, Tabler arayüz kütüphanesi, derleme adımı yok) |
 | `server/public/static/design-render.js` | Tasarım çizim motoru. Tarayıcıda ve sunucuda (`src/render.js`, @napi-rs/canvas) aynı kod çalışır. |
+| `docs/` | Gömülü yazılım belgeleri: resim modu protokolü, STM32 referans alıcı kodu ve testi |
 
 STM32 alıcı firmware'i bu repoda **değil**; ayrı bir ekip geliştiriyor.
 
@@ -30,7 +31,9 @@ STM32 alıcı firmware'i bu repoda **değil**; ayrı bir ekip geliştiriyor.
   - `ack {reqId}`
   - `result {reqId, ok, message}`
 - Sunucu → gateway:
-  - `send {reqId, serial, fields}`
+  - `send {reqId, serial, fields}`: eski alan modu (399 byte'lık metin paketi)
+  - `send_image {reqId, serial, size, chunk}` + ikili parçalar (≤ 8 KB): resim modu,
+    firmware 2.3.0 ve üstü. Ayrıntı: [docs/resim-modu.md](docs/resim-modu.md)
   - `command restart | wifi_reset`
   - `error bad_secret`
 - Kimlik doğrulama: gateway'in ilk bağlantıda gönderdiği secret kabul edilir ve SHA-256 özeti
@@ -40,6 +43,10 @@ STM32 alıcı firmware'i bu repoda **değil**; ayrı bir ekip geliştiriyor.
 - nRF24 ayarları: 250 kbps, kanal 40, 3 byte adres (bayt sırası ters çevrilir, açıklaması
   `src/nrf_gateway.cpp` içinde).
 - Etiket paketi 399 byte'tır. Parçalar 1 byte sıra numarası + 30 byte veriden oluşur.
+- Resim modu nRF paketleri: `A1` START, `A2` DATA (16 bit sıra no + 29 byte), `A3` END,
+  `A4` STATUS (alıcı ACK payload ile durum döner).
+- Panel verisini sunucu üretir: `server/src/epd-image.js` (döndürme, panel RAM biçimi, RLE,
+  CRC32). STM32 referans alıcısı: `docs/stm32/epd_image_rx.c`.
 
 ## Kurallar
 
@@ -97,13 +104,16 @@ Bu Windows makinede git, PlatformIO, Docker ve PostgreSQL PATH'te değil:
 
 ## Açık işler
 
-- **Faz 5 · 2. aşama:** tasarımı etikete resim olarak gönderme.
-  - Donanım değişikliği gerekmez. Kırmızı içerik için BWR (üç renkli) panel gerekir; şu anki
-    paneller siyah-beyaz: 2.13" GDEY0213B74 ve 1.54".
-  - Sunucu `render.renderPlanes` ile ekranın bit düzlemlerini üretir ve sıkıştırır (RLE).
-  - Gateway'de parça sıra numarası 16 bit'e çıkarılır.
-  - Alıcıya "resim modu" eklenir: gelen parçalar doğrudan panelin RAM'ine yazılır.
-  - Kullanıcıdan beklenenler: STM32 modeli, alıcı kodu, sahadaki paneller.
+- **Faz 6 (resim modu):** Sunucu ve gateway tarafı bitti, testleri geçti.
+  - Sahadaki yeni panel: 5.83" GDEY0583F41 (648×480, 4 renk BWRY, JD79665).
+  - STM32 alıcı entegrasyonu gömülü yazılım ekibinde: `docs/resim-modu.md` gönderildi.
+  - Doğrulanacaklar:
+    - JD79665 renk kodları (00 siyah, 01 beyaz, 10 sarı, 11 kırmızı)
+    - Dikey panel yönü (90° mi, 270° mi)
+  - Gateway'deki `nrfAddressForSerial()` geçici olarak sabit `ESA` döndürüyor; kullanıcının
+    BCD çevirme fonksiyonuyla değiştirilecek.
+  - STM32 modeli bilinmiyor. Kullanıcı sadece "192 KB flash" dedi; alıcı kodu RAM tamponu
+    gerektirmiyor.
 - **Firmware:** Bu repodaki gateway firmware'i hâlâ `send` mesajındaki `board` alanını
   okuyor. Kullanıcının `serial` + BCD destekli güncel firmware'i başka yerde; paylaşınca
   buraya birleştirilecek.

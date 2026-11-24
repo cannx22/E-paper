@@ -107,10 +107,52 @@ const TEMPLATES = [
   },
 ];
 
-async function seedDesigns() {
-  if (await settings.get('designs_seeded')) return;
+// Faz 6: 4 renkli 5.83" panel (GDEY0583F41) icin kasa onu fiyat listesi.
+const PRICE_LIST = [
+  ['Sütlü Çikolata 13,5 gr', '50,00'], ['Enerji Shot 60 ml', '130,00'], ['Ice Tea Şeftali 250 ml', '130,00'],
+  ['Ice Tea Limon 250 ml', '130,00'], ['Acı Biberli Cips 75 gr', '120,00'], ['Peynirli Cips 75 gr', '120,00'],
+  ['Patates Cipsi 75 gr', '120,00'], ['Protein Bar Çikolata 50 gr', '85,00'], ['Protein Bar Muz 50 gr', '85,00'],
+  ['Gofret 25 gr', '65,00'], ['Bisküvi (adet)', '20,00'],
+];
+const TEMPLATES_V2 = [
+  {
+    name: 'Kasa Önü Fiyat Listesi (4 Renk)', category: 'restoran', model: 'EPD583-BWRY-V',
+    description: '5.83" dikey, kırmızı çerçeve, sarı fiyat kutuları. Ürün ve fiyatları editörde düzenleyin.',
+    elements: () => {
+      const rowY = 172;
+      const rowH = 33;
+      const rows = PRICE_LIST.flatMap(([name, price], i) => {
+        const y = rowY + i * rowH;
+        return [
+          R(40, y + 10, 10, 10, { fill: null, stroke: 'black', strokeWidth: 2, name: 'Madde ' + (i + 1) }),
+          T(58, y, 278, 30, name, { font: 'Roboto Condensed', size: 17, weight: 700, valign: 'middle', name: 'Ürün ' + (i + 1) }),
+          L(58, y + 29, 278, 1, { dashed: true }),
+          R(342, y + 3, 100, 26, { fill: 'yellow', name: 'Fiyat kutusu ' + (i + 1) }),
+          T(342, y + 3, 100, 26, price + ' TL', { font: 'Oswald', size: 17, weight: 700, align: 'center', valign: 'middle', name: 'Fiyat ' + (i + 1) }),
+        ];
+      });
+      return [
+        R(0, 0, 480, 648, { fill: 'white', stroke: 'accent', strokeWidth: 16, name: 'Çerçeve' }),
+        R(22, 22, 436, 604, { fill: null, stroke: 'black', strokeWidth: 1, name: 'İç çizgi' }),
+        T(32, 34, 416, 60, '{{isletme}}', { font: 'Oswald', size: 46, weight: 700, color: 'accent', align: 'center', valign: 'middle' }),
+        T(32, 94, 416, 22, '{{alt_baslik}}', { size: 14, weight: 700, align: 'center' }),
+        R(36, 122, 408, 40, { fill: 'accent', name: 'Başlık bandı' }),
+        T(36, 122, 408, 40, '— KASA ÖNÜ ÜRÜNLERİ —', { font: 'Oswald', size: 22, weight: 700, color: 'white', align: 'center', valign: 'middle' }),
+        ...rows,
+        R(36, 548, 254, 62, { fill: null, stroke: 'black', strokeWidth: 2, name: 'Bilgi kutusu' }),
+        T(46, 554, 236, 24, 'Güncelleme: {{tarih}}', { font: 'Roboto Condensed', size: 16, weight: 700, valign: 'middle' }),
+        T(46, 580, 236, 22, 'Fiyatlarımıza KDV dahildir.', { size: 13, valign: 'middle' }),
+        R(302, 548, 142, 62, { fill: 'accent', name: 'Rozet' }),
+        T(302, 548, 142, 62, 'YERLİ\nÜRETİM', { font: 'Oswald', size: 20, weight: 700, color: 'white', align: 'center', valign: 'middle', maxLines: 2 }),
+      ];
+    },
+  },
+];
+
+async function insertTemplates(list) {
   const models = Object.fromEntries((await db.many('SELECT id, code, width_px, height_px, colors FROM screen_models')).map((m) => [m.code, m]));
-  for (const t of TEMPLATES) {
+  let added = 0;
+  for (const t of list) {
     const m = models[t.model];
     if (!m) continue;
     const doc = { version: 1, width: m.width_px, height: m.height_px, colors: m.colors, elements: t.elements() };
@@ -118,9 +160,23 @@ async function seedDesigns() {
       'INSERT INTO designs (dealer_id, name, category, description, screen_model_id, doc) VALUES (NULL, $1, $2, $3, $4, $5)',
       [t.name, t.category, t.description, m.id, JSON.stringify(doc)],
     );
+    added++;
   }
-  await settings.set('designs_seeded', true);
-  console.log(`Tasarım kütüphanesine ${TEMPLATES.length} hazır şablon eklendi.`);
+  return added;
 }
 
-module.exports = { seedDesigns, TEMPLATES };
+// Her sablon grubu bir kez eklenir (kullanici silerse geri gelmez).
+async function seedDesigns() {
+  let added = 0;
+  if (!(await settings.get('designs_seeded'))) {
+    added += await insertTemplates(TEMPLATES);
+    await settings.set('designs_seeded', true);
+  }
+  if (!(await settings.get('designs_seeded_v2'))) {
+    added += await insertTemplates(TEMPLATES_V2);
+    await settings.set('designs_seeded_v2', true);
+  }
+  if (added) console.log(`Tasarım kütüphanesine ${added} hazır şablon eklendi.`);
+}
+
+module.exports = { seedDesigns, TEMPLATES, TEMPLATES_V2 };

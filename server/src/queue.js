@@ -62,7 +62,10 @@ function waitForAttempt(jobId, timeoutMs) {
 }
 
 // ---- Kuyruga ekleme ----
-// items: [{ serial, dealerId, branchId, gatewayId, fixedGateway, fields }]
+// items: [{ serial, dealerId, branchId, gatewayId, fixedGateway, fields,
+//           image?, imageHash?, designId?, designVersion? }]
+//   image (Buffer) verilirse is resim modundadir (kind = 'image'); fields o
+//   durumda tasarima doldurulan veriyi tutar (gecmiste gosterilir).
 // opts: { batchId, priority, user }
 async function enqueue(client, items, opts = {}) {
   if (!items.length) return [];
@@ -79,15 +82,20 @@ async function enqueue(client, items, opts = {}) {
   );
   const r = await client.query(
     `INSERT INTO update_jobs (batch_id, dealer_id, branch_id, serial, gateway_id, fixed_gateway, fields,
-                              priority, max_attempts, expires_at, created_by, username)
-     SELECT $1, t.d, t.b, t.s, t.g, t.f, t.j::jsonb, $2, $3, now() + ($4 || ' hours')::interval, $5, $6
-       FROM unnest($7::text[], $8::bigint[], $9::bigint[], $10::text[], $11::boolean[], $12::text[]) AS t(s, d, b, g, f, j)
+                              priority, max_attempts, expires_at, created_by, username,
+                              kind, image, image_hash, design_id, design_version)
+     SELECT $1, t.d, t.b, t.s, t.g, t.f, t.j::jsonb, $2, $3, now() + ($4 || ' hours')::interval, $5, $6,
+            CASE WHEN t.img IS NULL THEN 'fields' ELSE 'image' END, t.img, t.ih, t.di, t.dv
+       FROM unnest($7::text[], $8::bigint[], $9::bigint[], $10::text[], $11::boolean[], $12::text[],
+                   $13::bytea[], $14::text[], $15::bigint[], $16::int[]) AS t(s, d, b, g, f, j, img, ih, di, dv)
      RETURNING id, serial`,
     [
       opts.batchId || null, opts.priority || 0, maxAttempts, String(ttlHours),
       opts.user ? opts.user.id : null, opts.user ? opts.user.username : null,
       serials, items.map((i) => i.dealerId || null), items.map((i) => i.branchId || null),
       items.map((i) => i.gatewayId || null), items.map((i) => !!i.fixedGateway), items.map((i) => JSON.stringify(i.fields)),
+      items.map((i) => i.image || null), items.map((i) => i.imageHash || null),
+      items.map((i) => i.designId || null), items.map((i) => i.designVersion || null),
     ],
   );
   const batchIds = [...new Set(sup.rows.map((x) => x.batch_id).filter(Boolean))];
@@ -95,8 +103,25 @@ async function enqueue(client, items, opts = {}) {
   return r.rows;
 }
 
+// Resim isleri goruntuyu (30-80 KB) saklar. Biten (basarili/iptal) islerin
+// goruntusu 7 gun sonra silinir; cihazin ekrandaki son goruntusu korunur.
+// Basarisiz isler tekrar denenebilsin diye dokunulmaz.
+const IMAGE_CLEANUP_MS = 60 * 60 * 1000;
+let lastImageCleanup = 0;
+async function cleanupImages() {
+  if (Date.now() - lastImageCleanup < IMAGE_CLEANUP_MS) return;
+  lastImageCleanup = Date.now();
+  await db.query(
+    `UPDATE update_jobs j SET image = NULL
+      WHERE j.kind = 'image' AND j.image IS NOT NULL AND j.status IN ('success', 'cancelled')
+        AND j.finished_at < now() - interval '7 days'
+        AND NOT EXISTS (SELECT 1 FROM devices d WHERE d.last_image_job_id = j.id)`,
+  );
+}
+
 // ---- Bakim: suresi dolan, devre disi cihaz, gateway degisimi ----
 async function maintenance() {
+  await cleanupImages();
   await db.query(
     `UPDATE update_jobs j SET gateway_id = d.gateway_id, branch_id = COALESCE(d.branch_id, j.branch_id), updated_at = now()
        FROM devices d
@@ -150,13 +175,16 @@ async function finishJob(job, status, message, gatewayId) {
   );
   const ok = status === 'success';
   const device = await db.one('SELECT name, last_content AS before FROM devices WHERE id = $1', [job.serial]);
+  const isImage = job.kind === 'image';
   if (device) {
     await db.query(
       `UPDATE devices SET last_update_at = now(), last_update_ok = $2, last_update_message = $3,
                           last_ok_at = CASE WHEN $2 THEN now() ELSE last_ok_at END,
-                          last_content = CASE WHEN $2 THEN $4::jsonb ELSE last_content END
+                          last_content = CASE WHEN $2 THEN $4::jsonb ELSE last_content END,
+                          design_id = CASE WHEN $2 THEN $5 ELSE design_id END,
+                          last_image_job_id = CASE WHEN $2 AND $6 THEN $7 WHEN $2 THEN NULL ELSE last_image_job_id END
         WHERE id = $1`,
-      [job.serial, ok, message, JSON.stringify(job.fields)],
+      [job.serial, ok, message, JSON.stringify(job.fields), isImage ? job.design_id : null, isImage, job.id],
     );
   }
   const gw = await db.one('SELECT name FROM gateways WHERE id = $1', [gatewayId]);
@@ -167,18 +195,31 @@ async function finishJob(job, status, message, gatewayId) {
     details: {
       serial: job.serial, gatewayId, gatewayName: gw ? gw.name : null, deviceName: device ? device.name : null,
       fields: job.fields, before: device ? device.before : null, jobId: job.id, batchId: job.batch_id, attempts: job.attempts,
+      mode: isImage ? 'image' : 'fields', designId: job.design_id || null, designVersion: job.design_version || null,
     },
   });
   if (job.batch_id) await closeBatches([job.batch_id]);
+  delete row.image;
   notify(job.id, { status, message, final: true, job: row });
 }
 
 async function processJob(job, gatewayId) {
-  const result = await hub.dispatch(gatewayId, job.serial, job.fields, () => {
+  const onAck = () => {
     db.query(`UPDATE update_jobs SET status = 'received', updated_at = now() WHERE id = $1 AND status = 'sending'`, [job.id]).catch(() => {});
-  });
+  };
+  if (job.kind === 'image' && !job.image) {
+    await finishJob(job, 'failed', 'HATA: Görüntü verisi artık yok; tasarımı yeniden gönderin.', gatewayId);
+    return;
+  }
+  const result = job.kind === 'image'
+    ? await hub.dispatchImage(gatewayId, job.serial, job.image, onAck)
+    : await hub.dispatch(gatewayId, job.serial, job.fields, onAck);
   if (result.ok) {
     await finishJob(job, 'success', result.message, gatewayId);
+    return;
+  }
+  if (result.fatal) {
+    await finishJob(job, 'failed', result.message, gatewayId);
     return;
   }
   if (result.offline || result.disconnected) {

@@ -13,6 +13,11 @@
 // ("ESA"/"ESB") adresine gonderir, sonucu message'a yazar.
 typedef bool (*CloudSendHandler)(JsonObjectConst fields, const String &board, String &message);
 
+// "send_image" mesaji ve ardindan gelen ikili (binary) veri tamamlaninca
+// cagrilir (resim modu, docs/resim-modu.md): blob'u serial seri numarali
+// aliciya gonderir, sonucu message'a yazar.
+typedef bool (*CloudImageHandler)(const String &serial, const uint8_t *blob, size_t len, String &message);
+
 // "command" mesaji geldiginde cagrilir ("restart", "wifi_reset").
 typedef void (*CloudCommandHandler)(const String &command);
 
@@ -27,6 +32,11 @@ struct CloudConfig {
 // URL gecersizse false doner (baglanti denenmez).
 bool CloudClient_Begin(const CloudConfig &cfg, CloudSendHandler onSend, CloudCommandHandler onCommand);
 void CloudClient_Loop();
+// Resim modu isleyicisini kaydeder (verilmezse send_image reddedilir).
+void CloudClient_SetImageHandler(CloudImageHandler onImage);
+// Uzun suren nRF gonderimi sirasinda WebSocket baglantisini canli tutar
+// (ping/pong). Sadece gonderim isleyicisinin icinden cagrilir.
+void CloudClient_Poll();
 bool CloudClient_IsConnected();
 
 // url'yi parcalarina ayirir; "ws://", "wss://", "http://", "https://" kabul

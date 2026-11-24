@@ -18,7 +18,8 @@
       <h2 class="page-title"><i class="ti ti-tag me-2"></i><span class="mono" id="title">...</span><span class="ms-2 fs-3 text-secondary" id="subtitle"></span></h2>
     </div>
     <div class="col-auto ms-auto"><div class="btn-list">
-      <a class="btn btn-primary" id="sendLink" data-can="label.send"><i class="ti ti-send me-1"></i>Etiket Gönder</a>
+      <a class="btn btn-primary" id="designLink" data-can="label.send"><i class="ti ti-photo-up me-1"></i>Tasarım Gönder</a>
+      <a class="btn" id="sendLink" data-can="label.send"><i class="ti ti-send me-1"></i>Etiket Gönder</a>
       <button class="btn" id="toggleBtn" data-can="device.manage"></button>
       <button class="btn btn-ghost-danger" id="deleteBtn" data-can="device.manage"><i class="ti ti-trash"></i></button>
     </div></div>
@@ -63,10 +64,14 @@ var serial = decodeURIComponent(location.pathname.split('/')[2] || '');
 var dev = null;
 var FIELD_LABELS = {business: 'İşletme', name: 'Ürün', subtitle: 'Alt başlık', price: 'Fiyat', oldPrice: 'Eski fiyat', unit: 'Birim', bottomCode: 'Alt kod', barcode: 'Barkod'};
 var TEMPLATES = {1: 'Standart', 3: 'Ticket', 4: 'Basic'};
+// Tasarim dinamik alanlari (design-render.js FIELDS ile ayni)
+var DESIGN_FIELDS = {isletme: 'İşletme adı', urun_adi: 'Ürün adı', alt_baslik: 'Alt başlık', fiyat: 'Fiyat', eski_fiyat: 'Eski fiyat', birim: 'Birim', barkod: 'Barkod', alt_kod: 'Alt kod', kampanya: 'Kampanya metni', icerik: 'İçindekiler / menü'};
 
 function dt(label, value){ return '<dt class="col-5 text-secondary fw-normal">' + label + '</dt><dd class="col-7">' + value + '</dd>'; }
 function contentSummary(f){
   if (!f) return '';
+  // Resim modu: fields = { design: tasarim adi, urun_adi, fiyat, ... }
+  if (f.design) return ['Tasarım: ' + f.design, f.urun_adi, f.fiyat ? f.fiyat + ' ' + (f.birim || '') : ''].filter(Boolean).join(' · ');
   return [f.name, f.price ? f.price + ' ' + (f.unit || '') : ''].filter(Boolean).join(' · ');
 }
 function load(){
@@ -75,6 +80,9 @@ function load(){
     document.getElementById('title').textContent = d.serial;
     document.getElementById('subtitle').textContent = d.name || '';
     document.getElementById('sendLink').href = '/?serial=' + encodeURIComponent(d.serial);
+    // Son gonderilen tasarim varsa onu ac; yoksa bu ekran modelinin tasarimlari.
+    document.getElementById('designLink').href = d.designId ? '/designs/' + d.designId + '/edit?send=1&serial=' + encodeURIComponent(d.serial)
+      : '/designs' + (d.modelId ? '?modelId=' + d.modelId : '');
     document.getElementById('toggleBtn').innerHTML = d.state === 'active' ? '<i class="ti ti-player-pause me-1"></i>Devre Dışı Bırak' : '<i class="ti ti-player-play me-1"></i>Etkinleştir';
     document.getElementById('info').innerHTML =
       dt('Durum', d.state === 'active' ? '<span class="badge bg-green-lt">Aktif</span>' : '<span class="badge bg-secondary-lt">Devre Dışı</span>') +
@@ -87,6 +95,14 @@ function load(){
       dt('Eklenme', App.formatDate(d.createdAt)) + (d.notes ? dt('Not', '<span class="text-pre">' + e(d.notes) + '</span>') : '');
 
     var c = d.lastContent;
+    if (c && d.lastImageJobId) {
+      var dataKeys = Object.keys(c).filter(function(k){ return k !== 'design' && c[k]; });
+      document.getElementById('content').innerHTML =
+        '<div class="mb-2"><img src="/api/updates/jobs/' + d.lastImageJobId + '/image.png" alt="Ekrandaki görüntü" onload="if(this.clientWidth>=this.naturalWidth)this.style.imageRendering=\'pixelated\'" style="max-width:100%;border:1px solid var(--tblr-border-color);background:#fff"></div>' +
+        '<div class="mb-2"><span class="badge bg-blue-lt"><i class="ti ti-photo me-1"></i>Resim modu</span> ' +
+        (d.designId ? '<a href="/designs/' + d.designId + '/edit">' + e(c.design || 'Tasarım') + '</a>' : e(c.design || '')) + '</div>' +
+        (dataKeys.length ? '<dl class="row mb-0">' + dataKeys.map(function(k){ return dt(e(DESIGN_FIELDS[k] || k), e(c[k])); }).join('') + '</dl>' : '');
+    } else
     document.getElementById('content').innerHTML = c ? '<div class="mb-2"><span class="badge bg-blue-lt">' + e(TEMPLATES[c.templateID] || 'Şablon ' + c.templateID) + '</span>' +
       (c.discountEnabled ? ' <span class="badge bg-orange-lt">İndirim</span>' : '') + (c.campaignEnabled ? ' <span class="badge bg-purple-lt">Kampanya</span>' : '') + '</div>' +
       '<dl class="row mb-0">' + Object.keys(FIELD_LABELS).filter(function(k){ return c[k]; }).map(function(k){ return dt(FIELD_LABELS[k], e(c[k])); }).join('') + '</dl>'

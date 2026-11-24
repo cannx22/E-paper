@@ -13,6 +13,11 @@
 //   srv -> gw   {type:"send", reqId, serial:"12345678", fields:{...}}
 //               serial: hedef e-paper cihazin 8 haneli seri numarasi; nRF24
 //               adresine (BCD) cevirme gateway ve alici tarafinda yapilir.
+//   srv -> gw   {type:"send_image", reqId, serial, size, chunk}   (firmware 2.3+)
+//               ardindan toplam "size" byte, en fazla "chunk" byte'lik
+//               ikili (binary) WebSocket mesajlari halinde gelir. Icerik:
+//               24 byte baslik + panel verisi (docs/resim-modu.md). Gateway
+//               hepsini alinca "ack" gonderir, nRF ile iletip "result" doner.
 //   gw  -> srv  {type:"ack", reqId}                    (istege bagli: "gateway aldi")
 //   gw  -> srv  {type:"result", reqId, ok, message}
 //   srv -> gw   {type:"command", command:"restart"|"wifi_reset"}
@@ -35,7 +40,22 @@ const audit = require('./audit');
 const WS_PATH = '/ws/gateway';
 const HELLO_TIMEOUT_MS = 10000;
 const SEND_TIMEOUT_MS = 20000;
+// Resim: WebSocket aktarimi + binlerce nRF paketi + alici durum sorgusu
+const IMAGE_TIMEOUT_MS = 90000;
+// Gateway kutuphanesi (arduinoWebSockets) 15 KB'tan buyuk mesajlari reddeder.
+const IMAGE_CHUNK = 8 * 1024;
+const IMAGE_MIN_FW = '2.3.0';
 const PING_INTERVAL_MS = 25000;
+
+// "2.10.1" >= "2.3.0" karsilastirmasi
+function fwAtLeast(fw, min) {
+  const a = String(fw || '').split(/[.-]/).map((x) => parseInt(x, 10) || 0);
+  const b = min.split('.').map(Number);
+  for (let i = 0; i < b.length; i++) {
+    if ((a[i] || 0) !== b[i]) return (a[i] || 0) > b[i];
+  }
+  return true;
+}
 
 const connections = new Map(); // id -> Connection
 // 'online' (gatewayId) / 'offline' (gatewayId): kuyruk dagiticisi dinler.
@@ -101,7 +121,14 @@ class Connection {
   // onAck: gateway "aldim" dediginde cagrilir (firmware destekliyorsa).
   enqueueSend(serial, fields, onAck) {
     return new Promise((resolve) => {
-      this.queue.push({ serial, fields, onAck, resolve });
+      this.queue.push({ kind: 'fields', serial, fields, onAck, resolve });
+      this.pump();
+    });
+  }
+
+  enqueueImage(serial, image, onAck) {
+    return new Promise((resolve) => {
+      this.queue.push({ kind: 'image', serial, image, onAck, resolve });
       this.pump();
     });
   }
@@ -120,10 +147,17 @@ class Connection {
     const reqId = String(this.nextReqId++);
     const timer = setTimeout(() => {
       this.finish(reqId, { ok: false, timeout: true, message: 'HATA: Gateway zamaninda cevap vermedi.' });
-    }, SEND_TIMEOUT_MS);
+    }, job.kind === 'image' ? IMAGE_TIMEOUT_MS : SEND_TIMEOUT_MS);
     this.current = { reqId, resolve: job.resolve, onAck: job.onAck, timer };
     try {
-      this.sendJson({ type: 'send', reqId, serial: job.serial, fields: job.fields });
+      if (job.kind === 'image') {
+        this.sendJson({ type: 'send_image', reqId, serial: job.serial, size: job.image.length, chunk: IMAGE_CHUNK });
+        for (let o = 0; o < job.image.length; o += IMAGE_CHUNK) {
+          this.ws.send(job.image.subarray(o, o + IMAGE_CHUNK), { binary: true });
+        }
+      } else {
+        this.sendJson({ type: 'send', reqId, serial: job.serial, fields: job.fields });
+      }
     } catch (err) {
       this.finish(reqId, { ok: false, message: 'HATA: Gateway\'e gonderilemedi: ' + err.message });
     }
@@ -201,7 +235,7 @@ async function handleHello(ws, req, msg) {
     await audit.log(null, 'gateway.activated', { entityType: 'gateway', entityId: id, dealerId: gw.dealer_id, branchId: gw.branch_id });
   }
 
-  const conn = new Connection(ws, id, { ip, connectedAt: gw.connected_at });
+  const conn = new Connection(ws, id, { ip, connectedAt: gw.connected_at, fw: gw.fw_version });
   connections.set(id, conn);
   conn.sendJson({ type: 'hello_ack', status: gw.state, name: gw.name });
   logEvent(id, 'connected', ip, `fw ${gw.fw_version}`);
@@ -320,6 +354,24 @@ async function dispatch(gatewayId, serial, fields, onAck) {
   return conn.enqueueSend(serial, fields, onAck);
 }
 
+// Resim modu gonderimi. fatal: tekrar denemenin anlami yok (eski firmware).
+async function dispatchImage(gatewayId, serial, image, onAck) {
+  const conn = connections.get(gatewayId);
+  if (!conn) return { ok: false, offline: true, message: 'HATA: Gateway cevrimdisi.' };
+  if (!fwAtLeast(conn.info.fw, IMAGE_MIN_FW)) {
+    return {
+      ok: false, fatal: true,
+      message: `HATA: Gateway firmware'i resim modunu desteklemiyor (mevcut ${conn.info.fw || '?'}, en az ${IMAGE_MIN_FW} gerekli).`,
+    };
+  }
+  return conn.enqueueImage(serial, image, onAck);
+}
+
+function supportsImage(gatewayId) {
+  const conn = connections.get(gatewayId);
+  return conn ? fwAtLeast(conn.info.fw, IMAGE_MIN_FW) : null;
+}
+
 function onlineIds() { return Array.from(connections.keys()); }
 
 async function notifyStatus(id) {
@@ -345,5 +397,6 @@ function disconnect(id) {
 
 module.exports = {
   STATUS_LABELS, displayStatus,
-  events, attach, isOnline, onlineIds, dispatch, notifyStatus, sendCommand, disconnect,
+  IMAGE_MIN_FW, fwAtLeast,
+  events, attach, isOnline, onlineIds, dispatch, dispatchImage, supportsImage, notifyStatus, sendCommand, disconnect,
 };

@@ -9,6 +9,7 @@ const settings = require('../settings');
 const hub = require('../gateways');
 const { scopeSql } = require('../permissions');
 const { fail, parseId, optionalId } = require('./util');
+const R = require('../render');
 
 const api = express.Router();
 const requireView = auth.requireApi('audit.view');
@@ -31,12 +32,22 @@ function jobView(j) {
     priority: j.priority, nextAttemptAt: j.status === 'queued' ? j.next_attempt_at : null, message: j.last_message,
     fields: j.fields, username: j.username, createdAt: j.created_at, startedAt: j.started_at, finishedAt: j.finished_at,
     gatewayOnline: j.gateway_online,
+    kind: j.kind, designId: j.design_id || null, designName: j.design_name || null, designVersion: j.design_version || null,
+    imageBytes: j.image_bytes || null,
   };
 }
 
+// image (ikili panel verisi) listelere tasinmaz; sadece boyutu.
+const JOB_COLUMNS = `j.id, j.batch_id, j.dealer_id, j.branch_id, j.serial, j.gateway_id, j.fixed_gateway, j.fields, j.status,
+  j.priority, j.attempts, j.max_attempts, j.next_attempt_at, j.expires_at, j.last_message, j.created_by, j.username,
+  j.created_at, j.started_at, j.finished_at, j.updated_at, j.kind, j.design_id, j.design_version, j.image_hash,
+  octet_length(j.image) AS image_bytes`;
+
 const JOB_SELECT = `
-  SELECT j.*, dv.name AS device_name, g.name AS gateway_name, d.name AS dealer_name, b.name AS branch_name
+  SELECT ${JOB_COLUMNS}, dv.name AS device_name, g.name AS gateway_name, d.name AS dealer_name, b.name AS branch_name,
+         ds.name AS design_name
     FROM update_jobs j
+    LEFT JOIN designs ds ON ds.id = j.design_id
     LEFT JOIN devices dv ON dv.id = j.serial
     LEFT JOIN gateways g ON g.id = j.gateway_id
     LEFT JOIN dealers d ON d.id = j.dealer_id
@@ -167,10 +178,28 @@ api.get('/updates/jobs', requireView, async (req, res) => {
 async function loadJob(req) {
   const id = parseId(req.params.id);
   const params = [id];
-  const job = id && await db.one(`SELECT j.* FROM update_jobs j WHERE j.id = $1 AND ${scopeSql(req.user, 'j', params)}`, params);
+  const job = id && await db.one(`SELECT ${JOB_COLUMNS} FROM update_jobs j WHERE j.id = $1 AND ${scopeSql(req.user, 'j', params)}`, params);
   if (!job) fail(404, 'İş bulunamadı.');
   return job;
 }
+
+// Resim modundaki isin etikete giden goruntusu (panel verisinden geri acilir).
+api.get('/updates/jobs/:id/image.png', requireView, async (req, res) => {
+  const job = await loadJob(req);
+  if (job.kind !== 'image') fail(404, 'Bu iş resim modunda değil.');
+  const row = await db.one(
+    `SELECT j.image, m.colors, m.rotation FROM update_jobs j
+       LEFT JOIN designs ds ON ds.id = j.design_id LEFT JOIN screen_models m ON m.id = ds.screen_model_id
+      WHERE j.id = $1`, [job.id],
+  );
+  if (!row || !row.image) fail(404, 'Görüntü verisi yok.');
+  const header = R.EPD.parseHeader(row.image);
+  // Tasarim silinmisse yonu/renkleri bilinmez: panel yonunde, formattan tahmin edilen renklerle.
+  const model = row.colors ? row : { colors: header.format === 3 ? 'bwry' : header.format === 2 ? 'bwr' : 'bw', rotation: 0 };
+  const scale = Math.min(Math.max(parseInt(req.query.scale, 10) || 1, 1), 4);
+  res.type('image/png').setHeader('Cache-Control', 'private, max-age=86400');
+  res.send(await R.blobToPng(row.image, model, { scale }));
+});
 
 api.post('/updates/jobs/:id/cancel', requireManage, async (req, res) => {
   const job = await loadJob(req);

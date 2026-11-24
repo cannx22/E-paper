@@ -69,13 +69,14 @@ form.addEventListener('submit', function(ev){
 
 // ---- Ekran modelleri ----
 var e = App.escapeHtml, models = [];
-var COLORS = {bw: 'Siyah-Beyaz', bwr: 'Siyah-Beyaz-Kırmızı', bwy: 'Siyah-Beyaz-Sarı', color: 'Renkli'};
+var COLORS = {bw: 'Siyah-Beyaz', bwr: 'Siyah-Beyaz-Kırmızı', bwy: 'Siyah-Beyaz-Sarı', bwry: '4 Renk (Siyah-Beyaz-Kırmızı-Sarı)', color: 'Renkli'};
+var ROTATIONS = {0: '0° (tuval = panel)', 90: '90° saat yönü', 180: '180°', 270: '270° (90° saat tersi)'};
 function loadModels(){
   return App.apiRequest('GET', '/api/screen-models?all=1').then(function(list){
     models = list;
     document.getElementById('modelBody').innerHTML = list.length ? list.map(function(m){
       return '<tr><td><div class="fw-bold">' + e(m.name) + '</div><div class="small text-secondary mono">' + e(m.code) + (m.diagonal_in ? ' · ' + m.diagonal_in + '"' : '') + '</div></td>' +
-        '<td class="mono">' + m.width_px + ' × ' + m.height_px + '</td><td>' + e(COLORS[m.colors] || m.colors) + '</td>' +
+        '<td class="mono">' + m.width_px + ' × ' + m.height_px + (m.rotation ? ' <span class="badge bg-azure-lt" title="Panele yazarken döndürme">↻ ' + m.rotation + '°</span>' : '') + '</td><td>' + e(COLORS[m.colors] || m.colors) + '</td>' +
         '<td class="small">' + m.device_count + ' cihaz · <a href="/designs?modelId=' + m.id + '">' + m.design_count + ' tasarım</a></td>' +
         '<td>' + App.activeBadge(m.active) + '</td><td><button class="btn btn-sm" data-edit="' + m.id + '">Düzenle</button></td></tr>';
     }).join('') : App.emptyRow(6, 'Model yok', 'ti-device-desktop');
@@ -94,8 +95,11 @@ function modelDialog(m){
       '<div class="col-4"><label class="form-label">Boyut (inç)</label><input class="form-control" type="number" step="0.01" name="diagonal_in" value="' + (m && m.diagonal_in ? m.diagonal_in : '') + '"></div>' +
       '<div class="col-sm-8"><label class="form-label">Renkler</label><select class="form-select" name="colors"' + lock + '>' +
         Object.keys(COLORS).map(function(k){ return '<option value="' + k + '"' + (m && m.colors === k ? ' selected' : '') + '>' + COLORS[k] + '</option>'; }).join('') + '</select></div>' +
+      '<div class="col-sm-8"><label class="form-label">Panel yönü</label><select class="form-select" name="rotation">' +
+        Object.keys(ROTATIONS).map(function(k){ return '<option value="' + k + '"' + (String(m ? m.rotation || 0 : 0) === k ? ' selected' : '') + '>' + ROTATIONS[k] + '</option>'; }).join('') + '</select>' +
+        '<div class="form-hint">Tasarım tuvali panele yazılırken bu kadar döndürülür. Etikette görüntü ters çıkarsa 90° ↔ 270° değiştirin.</div></div>' +
       '<div class="col-sm-4 d-flex align-items-end"><label class="form-check form-switch mb-2"><input class="form-check-input" type="checkbox" name="active"' + (!m || m.active ? ' checked' : '') + '><span class="form-check-label">Aktif</span></label></div>' +
-      '</div>' + (used ? '<div class="form-hint mt-2"><i class="ti ti-lock me-1"></i>Bu model kullanımda olduğu için çözünürlük ve renk tipi değiştirilemez. Farklı panel için yeni model ekleyin.</div>' :
+      '</div>' + (used ? '<div class="form-hint mt-2"><i class="ti ti-lock me-1"></i>Bu model kullanımda olduğu için çözünürlük ve renk tipi değiştirilemez (panel yönü değiştirilebilir). Farklı panel için yeni model ekleyin.</div>' :
         '<div class="form-hint mt-2">Pasif modeller yeni tasarım ve cihaz eklerken listelenmez.</div>'),
     onOk: function(body){
       var b = {};

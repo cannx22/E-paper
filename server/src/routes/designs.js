@@ -9,8 +9,13 @@ const db = require('../db');
 const auth = require('../auth');
 const audit = require('../audit');
 const { can, isCentral } = require('../permissions');
-const { fail, parseId, optionalId, cleanName } = require('./util');
+const { fail, parseId, optionalId, cleanName, HttpError } = require('./util');
 const R = require('../render');
+const { resolveTarget, newCache, sendSingle, createBatch } = require('./labels');
+const { SERIAL_RE, normalizeSerial, IMPORT_MAX_ROWS } = require('./devices');
+
+// Resim gonderimi daha uzun surer (WebSocket aktarimi + yuzlerce nRF paketi).
+const SINGLE_IMAGE_WAIT_MS = 60000;
 
 const api = express.Router();
 const requireView = auth.requireApi('design.view');
@@ -228,6 +233,100 @@ api.post('/designs-render', requireView, async (req, res) => {
   const scale = Math.min(Math.max(parseInt(req.body.scale, 10) || 1, 1), 6);
   const png = await R.renderPng(doc, { ...R.DesignRender.sampleData(), ...(req.body.data || {}) }, { scale });
   res.type('image/png').send(png);
+});
+
+// ---- Resim modu: tasarimi etikete gonderme ----
+// Tasarima doldurulacak veri: sadece bilinen dinamik alanlar, metin.
+function cleanData(raw) {
+  const out = {};
+  if (!raw || typeof raw !== 'object') return out;
+  for (const f of R.DesignRender.FIELDS) {
+    if (!f.auto && raw[f.key] != null) out[f.key] = String(raw[f.key]).slice(0, 500);
+  }
+  return out;
+}
+
+async function renderForSend(d, data) {
+  const model = await loadModel(d.screen_model_id);
+  try {
+    return { model, ...(await R.renderPanel(d.doc, data, model)) };
+  } catch (err) {
+    fail(400, err.message);
+  }
+}
+
+// Etikete gidecek goruntunun onizlemesi + boyut/paket bilgisi. Goruntu,
+// gonderilecek panel verisinden geri acilarak uretilir.
+api.post('/designs/:id/panel-preview', requireView, async (req, res) => {
+  const d = await loadDesign(req, false);
+  const data = { ...R.DesignRender.sampleData(), ...cleanData(req.body && req.body.data) };
+  const r = await renderForSend(d, data);
+  const png = await R.blobToPng(r.blob, r.model);
+  res.json({
+    png: 'data:image/png;base64,' + Buffer.from(png).toString('base64'),
+    stats: r.stats, rotation: r.model.rotation || 0, colors: r.model.colors,
+  });
+});
+
+// Gomulu yazilim testi icin: gateway'e gidecek blob'u (?type=blob) veya acilmis
+// panel verisini (?type=raw) dosya olarak indirir. ?data=<json> ile alan verisi.
+api.get('/designs/:id/panel-blob', requireView, async (req, res) => {
+  const d = await loadDesign(req, false);
+  let data = R.DesignRender.sampleData();
+  if (req.query.data) { try { data = { ...data, ...cleanData(JSON.parse(req.query.data)) }; } catch { fail(400, 'Veri geçersiz.'); } }
+  const r = await renderForSend(d, data);
+  const raw = req.query.type === 'raw';
+  const body = raw ? R.EPD.decodeBlob(r.blob).raw : r.blob;
+  res.type('application/octet-stream')
+    .setHeader('Content-Disposition', `attachment; filename="tasarim-${d.id}.${raw ? 'raw' : 'blob'}"`);
+  res.send(body);
+});
+
+// Tasarimi cihazlara gonderir.
+//   { serials: ['12345678', ...], data: { fiyat: '...' }, gatewayId?, name? }
+// Tek cihaz: oncelikli gonderim, ilk denemenin sonucu metin olarak doner
+// (/api/send ile ayni). Birden cok cihaz: toplu is ({ batchId, queued, skipped }).
+api.post('/designs/:id/send', auth.requireApi('label.send'), async (req, res) => {
+  const d = await loadDesign(req, false);
+  const b = req.body || {};
+  const serials = [...new Set((Array.isArray(b.serials) ? b.serials : [b.serial]).map(normalizeSerial).filter(Boolean))];
+  if (!serials.length) fail(400, 'Gönderilecek cihaz seçilmedi.');
+  if (serials.length > IMPORT_MAX_ROWS) fail(400, `Tek seferde en fazla ${IMPORT_MAX_ROWS} cihaza gönderilebilir.`);
+
+  // Cihaz modeli biliniyorsa tasarimin ekran modeliyle ayni olmali.
+  const models = new Map((await db.many(
+    `SELECT dv.id, dv.model_id, m.name AS model_name FROM devices dv LEFT JOIN screen_models m ON m.id = dv.model_id WHERE dv.id = ANY($1)`,
+    [serials],
+  )).map((r) => [r.id, r]));
+  const cache = newCache();
+  const valid = [];
+  const skipped = [];
+  for (const serial of serials) {
+    try {
+      if (!SERIAL_RE.test(serial)) fail(400, 'Seri numarası 8 haneli olmalı.');
+      const target = await resolveTarget(req.user, serial, b.gatewayId, cache);
+      const dm = models.get(serial);
+      if (dm && dm.model_id && String(dm.model_id) !== String(d.screen_model_id)) {
+        fail(400, `Cihazın ekranı (${dm.model_name}) bu tasarımın ekranıyla (${d.model_name}) aynı değil.`);
+      }
+      valid.push(target);
+    } catch (err) {
+      if (!(err instanceof HttpError) || serials.length === 1) throw err;
+      skipped.push({ serial, message: err.message.replace(/^HATA:\s*/, '') });
+    }
+  }
+  if (!valid.length) return res.status(400).json({ batchId: null, queued: 0, skipped });
+
+  const data = cleanData(b.data);
+  const r = await renderForSend(d, data);
+  const items = valid.map((t) => ({
+    ...t, fields: { design: d.name, ...data },
+    image: r.blob, imageHash: r.hash, designId: d.id, designVersion: d.version,
+  }));
+  if (serials.length === 1) return sendSingle(res, items[0], req.user, SINGLE_IMAGE_WAIT_MS);
+  const name = String(b.name || '').trim().slice(0, 120) || `${d.name} → ${valid.length} cihaz`;
+  const out = await createBatch(req.user, items, name, 'bulk');
+  res.json({ ...out, skipped, stats: r.stats });
 });
 
 // Tarayicidaki onizleme icin QR matrisi (sunucuyla ayni kodlama).

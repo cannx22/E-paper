@@ -42,14 +42,14 @@
 var e = App.escapeHtml, $ = function(id){ return document.getElementById(id); };
 var models = [], dealers = [], list = [];
 var CATS = {market: 'Market', otel: 'Otel', restoran: 'Restoran', genel: 'Genel'};
-var COLORS = {bw: 'Siyah-Beyaz', bwr: 'Siyah-Beyaz-Kırmızı', bwy: 'Siyah-Beyaz-Sarı', color: 'Renkli'};
+var COLORS = {bw: 'Siyah-Beyaz', bwr: 'Siyah-Beyaz-Kırmızı', bwy: 'Siyah-Beyaz-Sarı', bwry: '4 Renk', color: 'Renkli'};
 
 function modelLabel(m){ return m.name + ' · ' + m.width_px + '×' + m.height_px + (m.colors !== 'bw' ? ' · ' + (COLORS[m.colors] || m.colors) : ''); }
 function thumbSrc(d){ return d.thumbnail || '/api/designs/' + d.id + '/render.png?scale=2&v=' + d.version; }
 
 function card(d){
   var scope = d.scope === 'global' ? '<span class="badge bg-purple-lt"><i class="ti ti-star me-1"></i>Hazır şablon</span>' : '<span class="badge bg-blue-lt">' + e(d.dealerName || 'Bayi') + '</span>';
-  var colorDot = d.colors === 'bwr' ? '<span class="badge bg-red-lt">+Kırmızı</span>' : d.colors === 'bwy' ? '<span class="badge bg-yellow-lt">+Sarı</span>' : '';
+  var colorDot = d.colors === 'bwr' ? '<span class="badge bg-red-lt">+Kırmızı</span>' : d.colors === 'bwy' ? '<span class="badge bg-yellow-lt">+Sarı</span>' : d.colors === 'bwry' ? '<span class="badge bg-red-lt">+Kırmızı</span> <span class="badge bg-yellow-lt">+Sarı</span>' : '';
   var manage = currentUser.can['design.manage'];
   return '<div class="col-sm-6 col-lg-4 col-xl-3"><div class="card design-card h-100">' +
     '<a class="design-thumb" href="/designs/' + d.id + '/edit" style="aspect-ratio:' + d.width + '/' + d.height + '"><img loading="lazy" alt="" src="' + e(thumbSrc(d)) + '"></a>' +

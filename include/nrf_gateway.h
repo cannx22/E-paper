@@ -24,3 +24,14 @@ bool NrfGateway_Init();
 // payload (TOTAL_LABEL_BYTES) verisini targetAddr (3 byte, ornegin "ESA"/"ESB")
 // adresine NRF_CHUNK_COUNT parca halinde gonderir.
 SendResult NrfGateway_SendLabel(const uint8_t payload[TOTAL_LABEL_BYTES], const uint8_t targetAddr[NRF_ADDR_LEN]);
+
+// ---- Resim modu (image_sender.cpp) icin dusuk seviye islemler ----
+// Yazma/okuma borusunu hedef adrese ayarlar (alicidaki bayt sirasi hatasi
+// nedeniyle adres ters cevrilir, NrfGateway_SendLabel ile ayni).
+void NrfGateway_OpenTarget(const uint8_t targetAddr[NRF_ADDR_LEN]);
+// Tek paket (en fazla 32 byte) gonderir; donanim ACK'i gelirse true.
+// ackBuf verilirse alicinin ACK payload'u buraya okunur (*ackLen = uzunluk,
+// payload yoksa 0). ackBuf NULL ise gelen ACK payload'lari atilir.
+bool NrfGateway_Write(const uint8_t *data, uint8_t len, uint8_t *ackBuf, uint8_t *ackLen);
+// Bekleyen ACK payload'larini (RX FIFO) temizler.
+void NrfGateway_FlushRx();

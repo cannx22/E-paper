@@ -9,6 +9,7 @@
 #include "label_payload.h"
 #include "nrf_gateway.h"
 #include "cloud_client.h"
+#include "image_sender.h"
 
 // Etiket gonderimi artik bulut sunucudan yonetiliyor (server/ klasoru): bu
 // cihazda yerel etiket paneli / kullanici girisi yok. Yerel web sunucusu
@@ -527,6 +528,36 @@ bool handleCloudSend(JsonObjectConst f, const String &board, String &message) {
     return ok;
 }
 
+// Seri numarasindan alicinin nRF24 adresi.
+// NOT: Seri no -> BCD adres cevirimi kullanicinin guncel firmware'inde
+// (bu repoda degil). Birlestirirken bu fonksiyonun govdesini o cevirim
+// fonksiyonuyla degistirin. Bu repodaki eski alicilar sabit "ESA" adresini
+// dinledigi icin simdilik o kullaniliyor.
+static void nrfAddressForSerial(const String &serial, uint8_t out[NRF_ADDR_LEN]) {
+    (void)serial;
+    memcpy(out, ADDR_ESA, NRF_ADDR_LEN);
+}
+
+// Sunucudan gelen "send_image" (resim modu): blob'u oldugu gibi parcalayip
+// aliciya gonderir. Ayrinti: docs/resim-modu.md
+bool handleCloudImage(const String &serial, const uint8_t *blob, size_t len, String &message) {
+    Serial.println("=== sunucudan resim istegi geldi ===");
+    if (!nrfReady) {
+        message = "HATA: nRF24L01 modulu baslatilamadi (kablo/pin baglantisini kontrol edin).";
+        return false;
+    }
+    uint8_t addr[NRF_ADDR_LEN];
+    nrfAddressForSerial(serial, addr);
+    Serial.print("  seri no: "); Serial.print(serial);
+    Serial.print("  boyut: "); Serial.print((unsigned)len); Serial.println(" byte");
+
+    ImageSendResult r = ImageSender_Send(blob, len, addr, CloudClient_Poll);
+    message = r.message;
+    Serial.print("  SONUC: "); Serial.println(r.message);
+    Serial.println("=== resim istegi bitti ===");
+    return r.success;
+}
+
 // Admin panelinden gonderilen komutlar.
 void handleCloudCommand(const String &command) {
     if (command == "restart") {
@@ -607,6 +638,7 @@ void setup() {
     cfg.fwVersion = FW_VERSION;
     cfg.nrfReady = nrfReady;
     CloudClient_Begin(cfg, handleCloudSend, handleCloudCommand);
+    CloudClient_SetImageHandler(handleCloudImage);
 }
 
 unsigned long lastWifiCheckMillis = 0;

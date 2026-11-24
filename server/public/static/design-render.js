@@ -3,7 +3,7 @@
 // gorulen ile etikete giden birebir aynidir.
 //
 // Belge semasi:
-//   { version: 1, width, height, colors: 'bw'|'bwr'|'bwy', elements: [El] }
+//   { version: 1, width, height, colors: 'bw'|'bwr'|'bwy'|'bwry', elements: [El] }
 //   El ortak: { id, type, x, y, w, h, hidden?, locked?, name? }
 //     text    : text ({{alan}} icerebilir), font, size, weight(400|700), italic,
 //               align(left|center|right), valign(top|middle|bottom), color,
@@ -14,7 +14,8 @@
 //     image   : src (data URL), fit(contain|cover|stretch), dither(bool), threshold
 //     barcode : format(EAN13|CODE128), value, showText, color
 //     qr      : value, color
-//   Renkler: 'black' | 'white' | 'accent' (bwr: kirmizi, bwy: sari; bw'de siyah)
+//   Renkler: 'black' | 'white' | 'accent' (bwr/bwry: kirmizi, bwy: sari; bw'de siyah)
+//            | 'yellow' (sadece bwry; diger panellerde accent'e / siyaha duser)
 //
 // env (ortama gore saglanir):
 //   loadImage(src) -> Promise<Image>, createCanvas(w, h) -> Canvas,
@@ -48,16 +49,25 @@
     { key: 'saat', label: 'Saat (otomatik)', auto: true },
   ];
 
+  // bwry (4 renk, ornek GDEY0583F41): accent = kirmizi, yellow = sari
   var PALETTES = {
     bw: { black: [0, 0, 0], white: [255, 255, 255] },
     bwr: { black: [0, 0, 0], white: [255, 255, 255], accent: [210, 30, 30] },
     bwy: { black: [0, 0, 0], white: [255, 255, 255], accent: [230, 180, 0] },
+    bwry: { black: [0, 0, 0], white: [255, 255, 255], accent: [210, 30, 30], yellow: [240, 190, 0] },
   };
 
+  // Panelde olmayan renk en yakin karsiligina duser: sari -> (bwy'de accent,
+  // bwr'de kirmizi accent, bw'de siyah); accent -> bw'de siyah.
+  function paletteColor(color, colors) {
+    var p = PALETTES[colors] || PALETTES.bw;
+    if (p[color]) return p[color];
+    if (color === 'yellow' && p.accent) return p.accent;
+    return p.black;
+  }
   function css(color, colors) {
     if (!color || color === 'none') return null;
-    var p = PALETTES[colors] || PALETTES.bw;
-    var c = p[color] || (color === 'accent' ? p.black : p.black);
+    var c = paletteColor(color, colors);
     return 'rgb(' + c[0] + ',' + c[1] + ',' + c[2] + ')';
   }
 
@@ -289,7 +299,7 @@
         }
       }
     }
-    var ink = PALETTES[colors] ? (PALETTES[colors][el.color] || PALETTES[colors].black) : [0, 0, 0];
+    var ink = paletteColor(el.color || 'black', colors);
     for (i = 0; i < w * h; i++) {
       var black = lum[i] < 128;
       px[i * 4] = black ? ink[0] : 255; px[i * 4 + 1] = black ? ink[1] : 255; px[i * 4 + 2] = black ? ink[2] : 255; px[i * 4 + 3] = black ? 255 : 0;
@@ -329,14 +339,15 @@
   // ton yok). Metin kenar yumusatmasi da boylece net siyah/beyaza doner.
   function quantize(ctx, w, h, colors) {
     var id = ctx.getImageData(0, 0, w, h), p = id.data;
-    var acc = PALETTES[colors] && PALETTES[colors].accent;
+    var pal = PALETTES[colors] || PALETTES.bw;
+    var red = colors === 'bwr' || colors === 'bwry' ? pal.accent : null;
+    var yellow = colors === 'bwy' ? pal.accent : colors === 'bwry' ? pal.yellow : null;
     for (var i = 0; i < p.length; i += 4) {
       var r = p[i], g = p[i + 1], b = p[i + 2];
       var out = null;
-      if (acc) {
-        var isAccent = colors === 'bwr' ? (r > 120 && r - g > 60 && r - b > 60) : (r > 150 && g > 110 && b < 90 && r - b > 80);
-        if (isAccent) out = acc;
-      }
+      // Once sari: turuncu tonlar bwry'de sariya, bwr'de kirmiziya gider.
+      if (yellow && r > 150 && g > 110 && b < 90 && r - b > 80) out = yellow;
+      else if (red && r > 120 && r - g > 60 && r - b > 60) out = red;
       // Esik 50%'nin biraz ustunde: ince harf cizgileri (kenar yumusatmali gri) kaybolmasin.
       if (!out) out = (0.299 * r + 0.587 * g + 0.114 * b) < 175 ? [0, 0, 0] : [255, 255, 255];
       p[i] = out[0]; p[i + 1] = out[1]; p[i + 2] = out[2]; p[i + 3] = 255;
@@ -344,19 +355,7 @@
     ctx.putImageData(id, 0, 0);
   }
 
-  // Panele gonderilecek bit duzlemleri (2. asama - resim modu): satir satir,
-  // her bayt 8 piksel (MSB solda); 1 = murekkep. { black, accent|null, stride }
-  function pack(ctx, w, h, colors) {
-    var p = ctx.getImageData(0, 0, w, h).data, stride = Math.ceil(w / 8);
-    var black = new Uint8Array(stride * h), accent = PALETTES[colors] && PALETTES[colors].accent ? new Uint8Array(stride * h) : null;
-    for (var y = 0; y < h; y++) for (var x = 0; x < w; x++) {
-      var i = (y * w + x) * 4, bit = 0x80 >> (x & 7), o = y * stride + (x >> 3);
-      var r = p[i], g = p[i + 1], b = p[i + 2];
-      if (r === 0 && g === 0 && b === 0) black[o] |= bit;
-      else if (accent && !(r === 255 && g === 255 && b === 255)) accent[o] |= bit;
-    }
-    return { black: black, accent: accent, stride: stride, width: w, height: h };
-  }
+  // Panelin RAM bicimine cevirme (resim modu) sunucuda yapilir: src/epd-image.js
 
   function newId() { return 'e' + Math.random().toString(36).slice(2, 9); }
   function emptyDoc(model) {
@@ -367,7 +366,12 @@
     var sx = width / doc.width, sy = height / doc.height, sf = Math.min(sx, sy);
     var out = JSON.parse(JSON.stringify(doc));
     out.width = width; out.height = height; out.colors = colors || doc.colors;
+    var from = doc.colors, to = out.colors;
     out.elements.forEach(function (el) {
+      ['color', 'fill', 'stroke', 'bg'].forEach(function (k) {
+        if (el[k] === 'yellow' && to !== 'bwry') el[k] = to === 'bw' ? 'black' : 'accent';
+        else if (el[k] === 'accent' && from === 'bwy' && to === 'bwry') el[k] = 'yellow';
+      });
       el.x = Math.round(el.x * sx); el.y = Math.round(el.y * sy);
       el.w = Math.max(1, Math.round(el.w * sx)); el.h = Math.max(1, Math.round(el.h * sy));
       if (el.size) el.size = Math.max(6, Math.round(el.size * sf));
@@ -403,7 +407,7 @@
 
   return {
     FONTS: FONTS, FIELDS: FIELDS, PALETTES: PALETTES,
-    render: render, quantize: quantize, pack: pack, resolve: resolve, sampleData: sampleData, dataFromLabelFields: dataFromLabelFields,
+    render: render, quantize: quantize, resolve: resolve, sampleData: sampleData, dataFromLabelFields: dataFromLabelFields,
     emptyDoc: emptyDoc, scaleDoc: scaleDoc, validate: validate, usedFields: usedFields, newId: newId, css: css,
     ean13: ean13, code128: code128,
   };

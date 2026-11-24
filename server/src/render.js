@@ -3,9 +3,11 @@
 // Fontlar TTF olarak hem buraya kaydedilir hem tarayiciya (/fonts/...) sunulur;
 // boylece harf olculeri iki tarafta aynidir.
 const path = require('path');
+const crypto = require('crypto');
 const QRCode = require('qrcode');
 const { createCanvas, loadImage, GlobalFonts } = require('@napi-rs/canvas');
 const DesignRender = require('../public/static/design-render');
+const EPD = require('./epd-image');
 
 const NM = path.join(__dirname, '..', 'node_modules', '@expo-google-fonts');
 // family -> { 400: dosya, 700: dosya }
@@ -74,10 +76,35 @@ async function renderPng(doc, data, { scale = 1 } = {}) {
   return big.encode('png');
 }
 
-// 2. asama (resim modu) icin panel bit duzlemleri.
-async function renderPlanes(doc, data) {
-  const { ctx } = await renderDoc(doc, data);
-  return DesignRender.pack(ctx, doc.width, doc.height, doc.colors);
+// Resim modu: tasarimi panelin RAM bicimine cevirip gateway'e gidecek blob'u
+// uretir. model: { colors, rotation }. Doner: { blob, stats, hash }
+async function renderPanel(doc, data, model, opts = {}) {
+  const { ctx } = await renderDoc(doc, data, opts);
+  const img = ctx.getImageData(0, 0, doc.width, doc.height);
+  const panel = EPD.toPanel(img.data, doc.width, doc.height, model.colors || doc.colors, model.rotation || 0, DesignRender.PALETTES);
+  const blob = EPD.buildBlob(panel);
+  if (blob.length > EPD.MAX_BLOB_LEN) {
+    throw new Error(`Tasarım sıkıştırılınca ${Math.round(blob.length / 1024)} KB tutuyor; en fazla ${EPD.MAX_BLOB_LEN / 1024} KB gönderilebilir. Büyük fotoğrafları küçültün veya görselde titrekleştirmeyi (dither) kapatın.`);
+  }
+  return { blob, stats: EPD.stats(blob), hash: crypto.createHash('sha256').update(blob).digest('hex') };
 }
 
-module.exports = { FONT_FILES, fontRoutes, qrMatrix, renderDoc, renderPng, renderPlanes, DesignRender };
+// Blob'dan (etikete giden veri) PNG onizleme: panel verisi geri acilip tuval
+// yonune dondurulur. Boylece arayuzde gorulen, gonderilen veriyle aynidir.
+function blobToPng(blob, model, { scale = 1 } = {}) {
+  const { header, raw } = EPD.decodeBlob(blob);
+  const img = EPD.fromPanel(raw, header.format, header.width, header.height, model.rotation || 0, model.colors, DesignRender.PALETTES);
+  const canvas = createCanvas(img.width, img.height);
+  const ctx = canvas.getContext('2d');
+  const id = ctx.createImageData(img.width, img.height);
+  id.data.set(img.rgba);
+  ctx.putImageData(id, 0, 0);
+  if (scale === 1) return canvas.encode('png');
+  const big = createCanvas(img.width * scale, img.height * scale);
+  const g = big.getContext('2d');
+  g.imageSmoothingEnabled = false;
+  g.drawImage(canvas, 0, 0, big.width, big.height);
+  return big.encode('png');
+}
+
+module.exports = { FONT_FILES, fontRoutes, qrMatrix, renderDoc, renderPng, renderPanel, blobToPng, DesignRender, EPD };

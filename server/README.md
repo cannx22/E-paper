@@ -185,8 +185,8 @@ Bayi tasarımlarını yalnızca o bayi görür.
 - **Dinamik alanlar:** `{{urun_adi}}`, `{{fiyat}}`, `{{barkod}}` vb. alanlar etiket
   gönderilirken gerçek verilerle dolar. Uzun metinler kutuya sığana kadar otomatik küçülür.
   **Örnek Veri** sekmesinden önizleme değerleri değiştirilebilir.
-- **E-paper görünümü:** Tasarım, panelin gerçek renklerine (siyah/beyaz, BWR ise kırmızı)
-  indirgenmiş olarak gösterilir. Tarayıcı ve sunucu aynı çizim kodunu
+- **E-paper görünümü:** Tasarım, panelin gerçek renklerine (siyah/beyaz; BWR'de kırmızı;
+  4 renkli panelde kırmızı ve sarı) indirgenmiş olarak gösterilir. Tarayıcı ve sunucu aynı çizim kodunu
   (`public/static/design-render.js`) ve aynı fontları kullanır. Bu yüzden editörde görülen,
   etikete gidenle birebir aynıdır.
 - **Kopyala / başka boyuta:** Bir tasarım başka bir ekran modeline kopyalanınca elemanlar yeni
@@ -194,10 +194,28 @@ Bayi tasarımlarını yalnızca o bayi görür.
 - **Sürüm geçmişi:** Her kayıtta önceki hal saklanır (son 50 sürüm) ve geri yüklenebilir.
 - **Ekran modelleri:** Merkez, **Sistem Ayarları → Ekran Modelleri** bölümünden yeni panel
   boyutu ekleyebilir. Kullanımdaki bir modelin çözünürlüğü değiştirilemez.
+  - **Panel yönü:** Tasarım tuvali panele yazılırken döndürülür. Örnek: 5.83" panel 648×480
+    yatay tarar ama dikey kullanılır; dikey model 90° ile kayıtlıdır. Etikette görüntü ters
+    çıkarsa yön 270° yapılır. Bu ayar kullanımdaki modelde de değiştirilebilir.
 
-Tasarımın etikete resim olarak gönderilmesi 2. aşamadır. Bu aşama gateway ve alıcı
-firmware'inde resim modu gerektirir. Sunucu tarafında panel bit düzlemleri
-(`render.renderPlanes`) hazırdır.
+### Etikete gönderme (resim modu)
+
+Editörde **Etikete Gönder** ile tasarım cihazlara resim olarak gönderilir.
+
+- Pencerede cihazlar seçilir ve tasarımdaki dinamik alanlar doldurulur.
+- Önizleme, gönderilecek panel verisinden geri açılarak üretilir. Bu yüzden görülen, etikete
+  gidenle birebir aynıdır. Veri boyutu, nRF paket sayısı ve tahmini süre de gösterilir.
+- Ekranı tasarımdan farklı olan, gateway'i atanmamış veya gateway firmware'i 2.3.0'dan eski
+  olan cihazlar seçilemez.
+- Tek cihaza gönderimde sonuç beklenir. Birden çok cihaza gönderim toplu iş olur ve
+  **Güncellemeler** sayfasından izlenir.
+- Cihaz sayfasında **Ekrandaki Son İçerik** kartı etikete giden görüntüyü gösterir. Aynı
+  sayfadaki **Tasarım Gönder** son tasarımı açar.
+
+Gönderim akışı: sunucu tasarımı panelin RAM biçimine çevirir (döndürme, 1/2 bit renk kodları),
+RLE ile sıkıştırır ve CRC32 ekler. Gateway bu veriyi anlamadan nRF paketlerine böler. Alıcı
+gelen veriyi açıp doğrudan panelin RAM'ine yazar; CRC tutarsa ekranı yeniler. Protokol ve
+gömülü yazılım entegrasyonu: [docs/resim-modu.md](../docs/resim-modu.md).
 
 ## Yerel geliştirme
 
@@ -221,8 +239,8 @@ Gateway'in yereldeki sunucuya bağlanması için kurulum sayfasındaki sunucu ad
 | 2.5 | E-posta ile giriş, bayi açılış sihirbazı, kurum/adres bilgileri, lisans limitleri, zorunlu şifre değişimi, hesap kilidi, merkez destek rolü, profil/oturumlar, seri no havuzu, gateway ve cihaz detay sayfaları, cihaz taşıma, yeni arayüz (Tabler, koyu tema) | ✅ |
 | 3 | Kalıcı güncelleme kuyruğu (offline bekletme, tekrar deneme, toplu güncelleme, durum adımları) | ✅ |
 | 4 | Ürün/içerik yönetimi ve cihaz ↔ ürün eşleştirme | |
-| 5 | Tasarım editörü (tüm ekran boyutları), tasarım kütüphanesi, sürüm geçmişi, dinamik alanlar, sunucuda PNG/bitmap çizimi | ✅ 1. aşama |
-| 6 | Tasarımı etikete resim olarak gönderme (gateway + alıcı resim modu) | |
+| 5 | Tasarım editörü (tüm ekran boyutları), tasarım kütüphanesi, sürüm geçmişi, dinamik alanlar, sunucuda PNG/bitmap çizimi | ✅ |
+| 6 | Tasarımı etikete resim olarak gönderme: 4 renkli 5.83" panel, panel yönü, RLE + CRC32, gateway resim modu (fw 2.3.0), STM32 referans alıcı kodu | ✅ sunucu + gateway · alıcı entegrasyonu bekliyor |
 | 7 | Zamanlama | |
 | 8 | Dış API, ERP entegrasyonu, stok uyarıları | |
 | 9 | Gelişmiş dashboard, gateway OTA güncelleme | |

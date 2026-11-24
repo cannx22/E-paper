@@ -21,7 +21,7 @@
   var ICONS = { text: 'ti-typography', rect: 'ti-square', ellipse: 'ti-circle', line: 'ti-line', image: 'ti-photo', barcode: 'ti-barcode', qr: 'ti-qrcode' };
   var TYPE_LABELS = { text: 'Metin', rect: 'Kutu', ellipse: 'Elips', line: 'Çizgi', image: 'Görsel', barcode: 'Barkod', qr: 'QR kod' };
   var CATS = { market: 'Market', otel: 'Otel', restoran: 'Restoran', genel: 'Genel' };
-  var COLOR_TYPES = { bw: 'Siyah-Beyaz', bwr: 'Siyah-Beyaz-Kırmızı', bwy: 'Siyah-Beyaz-Sarı', color: 'Renkli' };
+  var COLOR_TYPES = { bw: 'Siyah-Beyaz', bwr: 'Siyah-Beyaz-Kırmızı', bwy: 'Siyah-Beyaz-Sarı', bwry: 'Siyah-Beyaz-Kırmızı-Sarı', color: 'Renkli' };
 
   // ---------------- Ornek veri ----------------
   var DATA_KEY = 'epaper-design-data';
@@ -98,8 +98,9 @@
   }
   function colorChoices() {
     var list = [['black', 'Siyah'], ['white', 'Beyaz']];
-    if (doc.colors === 'bwr') list.push(['accent', 'Kırmızı']);
+    if (doc.colors === 'bwr' || doc.colors === 'bwry') list.push(['accent', 'Kırmızı']);
     if (doc.colors === 'bwy') list.push(['accent', 'Sarı']);
+    if (doc.colors === 'bwry') list.push(['yellow', 'Sarı']);
     return list;
   }
   function docPoint(ev) {
@@ -489,7 +490,10 @@
       var el = clone(o);
       el.id = DR.newId(); el.locked = false;
       el.x = Math.min(doc.width - 1, el.x + off); el.y = Math.min(doc.height - 1, el.y + off);
-      if (doc.colors === 'bw') ['color', 'fill', 'stroke', 'bg'].forEach(function (k) { if (el[k] === 'accent') el[k] = 'black'; });
+      ['color', 'fill', 'stroke', 'bg'].forEach(function (k) {
+        if (el[k] === 'yellow' && doc.colors !== 'bwry') el[k] = doc.colors === 'bw' ? 'black' : 'accent';
+        else if (el[k] === 'accent' && doc.colors === 'bw') el[k] = 'black';
+      });
       doc.elements.push(el); ids.push(el.id);
     });
     sel = ids;
@@ -979,6 +983,144 @@
     document.title = (design.name || 'Tasarım') + ' · Tasarım Editörü';
   }
 
+  // ---------------- Etikete gonder (resim modu) ----------------
+  // Sunucu kayitli tasarimi panelin RAM bicimine cevirir; onizleme de o
+  // veriden geri acilarak uretilir (etikete giden ile birebir ayni).
+  var send = { devices: [], picked: {}, data: {}, modal: null, timer: null, seq: 0 };
+  function sendFieldKeys() {
+    return DR.usedFields(doc).filter(function (k) { var f = DR.FIELDS.find(function (x) { return x.key === k; }); return !f || !f.auto; });
+  }
+  function sendDeviceOk(d) { return !d.modelId || String(d.modelId) === String(design.screenModelId); }
+  function renderSendDevices() {
+    var q = $('sendSearch').value.trim().toLowerCase();
+    var list = send.devices.filter(function (d) {
+      return !q || [d.serial, d.name, d.gatewayName, d.branchName].some(function (v) { return v && String(v).toLowerCase().indexOf(q) !== -1; });
+    });
+    $('sendDevices').innerHTML = list.length ? list.map(function (d) {
+      var oldFw = d.gatewayImageReady === false;
+      var ok = sendDeviceOk(d) && d.state !== 'disabled' && d.gatewayId && !oldFw;
+      var why = d.state === 'disabled' ? 'Devre dışı' : !d.gatewayId ? 'Gateway atanmamış' : !sendDeviceOk(d) ? 'Farklı ekran: ' + (d.modelName || '')
+        : oldFw ? 'Gateway firmware\'i eski (' + d.gatewayFw + '); resim modu için güncellenmeli' : '';
+      return '<label class="dz-send-row' + (ok ? '' : ' off') + '" title="' + e(why) + '">' +
+        '<input class="form-check-input" type="checkbox" data-serial="' + e(d.serial) + '"' + (send.picked[d.serial] ? ' checked' : '') + (ok ? '' : ' disabled') + '>' +
+        '<div class="flex-fill text-truncate"><div><span class="mono fw-bold">' + e(d.serial) + '</span>' + (d.name ? ' <span class="text-secondary">· ' + e(d.name) + '</span>' : '') + '</div>' +
+        '<div class="small text-secondary text-truncate">' + (why ? '<span class="text-warning">' + e(why) + '</span>' :
+          '<span class="status-dot ' + (d.gatewayOnline ? 'status-dot-animated bg-green' : 'bg-secondary') + ' me-1"></span>' + e(d.gatewayName || '') +
+          (d.modelId ? '' : ' · <span class="text-warning">ekran modeli tanımsız</span>')) + '</div></div></label>';
+    }).join('') : '<div class="p-3 text-secondary small">' + (send.devices.length ? 'Aramaya uyan cihaz yok.' : 'Kayıtlı cihaz yok. Cihazlar sayfasından ekleyin.') + '</div>';
+    var n = Object.keys(send.picked).length;
+    $('sendCount').textContent = n ? n + ' cihaz seçili' : 'Cihaz seçin';
+    $('sendGo').disabled = !n;
+  }
+  function renderSendFields() {
+    var keys = sendFieldKeys();
+    $('sendFields').innerHTML = keys.length ? '<div class="form-label">Dinamik alanlar</div><div class="row g-2">' + keys.map(function (k) {
+      var v = send.data[k] == null ? '' : send.data[k];
+      return '<div class="col-sm-6"><label class="form-label small mb-1">' + e(fieldLabel(k)) + ' <code class="small">{{' + e(k) + '}}</code></label>' +
+        (k === 'icerik' ? '<textarea class="form-control form-control-sm" rows="3" data-send-field="' + e(k) + '">' + e(v) + '</textarea>'
+          : '<input class="form-control form-control-sm" data-send-field="' + e(k) + '" value="' + e(v) + '">') + '</div>';
+    }).join('') + '</div>' : '<div class="small text-secondary"><i class="ti ti-info-circle me-1"></i>Bu tasarımda dinamik alan yok; tasarım olduğu gibi gönderilir.</div>';
+  }
+  function fmtBytes(n) { return n >= 1024 ? (Math.round(n / 102.4) / 10).toLocaleString('tr-TR') + ' KB' : n + ' B'; }
+  function loadSendPreview() {
+    var my = ++send.seq;
+    $('sendPreview').parentNode.classList.add('loading');
+    App.apiRequest('POST', '/api/designs/' + designId + '/panel-preview', { data: send.data }).then(function (r) {
+      if (my !== send.seq) return;
+      $('sendPreview').src = r.png;
+      var s = r.stats;
+      $('sendStats').innerHTML =
+        '<span class="dz-send-stat">Panel <b class="mono">' + s.width + '×' + s.height + '</b></span>' +
+        (r.rotation ? '<span class="dz-send-stat">Döndürme <b>' + r.rotation + '°</b></span>' : '') +
+        '<span class="dz-send-stat">Biçim <b>' + e(s.formatName) + '</b></span><br>' +
+        '<span class="dz-send-stat">Veri <b>' + fmtBytes(s.rawBytes) + ' → ' + fmtBytes(s.dataBytes) + '</b>' + (s.compressed ? ' (' + String(s.ratio).replace('.', ',') + 'x)' : '') + '</span>' +
+        '<span class="dz-send-stat"><b>' + s.packets.toLocaleString('tr-TR') + '</b> nRF paketi</span>' +
+        '<span class="dz-send-stat">≈ <b>' + String(s.estSeconds).replace('.', ',') + ' sn</b> aktarım</span>';
+    }).catch(function (err) {
+      if (my !== send.seq) return;
+      $('sendStats').innerHTML = '<span class="text-danger">' + e(err.message) + '</span>';
+    }).then(function () { if (my === send.seq) $('sendPreview').parentNode.classList.remove('loading'); });
+  }
+  async function openSend() {
+    if (mode === 'edit' && isDirty()) {
+      var okSave = await App.confirm('Etikete tasarımın kayıtlı hali gönderilir. Değişiklikleriniz kaydedilip öyle devam edilsin mi?', { title: 'Önce kaydedilsin mi?', okText: 'Kaydet ve Devam Et' });
+      if (!okSave) return;
+      await save();
+      if (isDirty()) return;
+    } else if (isDirty()) {
+      App.toast('Kaydedilmemiş değişiklikler gönderilmez; tasarımın kayıtlı hali gönderilir.', 'warning');
+    }
+    send.picked = {};
+    send.data = {};
+    sendFieldKeys().forEach(function (k) { send.data[k] = data[k] == null ? '' : data[k]; });
+    $('sendResult').innerHTML = '';
+    $('sendSearch').value = '';
+    renderSendFields();
+    renderSendDevices();
+    $('sendPreview').removeAttribute('src');
+    $('sendStats').textContent = '';
+    send.modal = send.modal || tabler.Modal.getOrCreateInstance($('sendModal'));
+    send.modal.show();
+    loadSendPreview();
+    App.apiRequest('GET', '/api/devices?limit=2000').then(function (r) {
+      // Ayni ekran modelindekiler once, sonra modeli tanimsizlar, en son digerleri.
+      var rank = function (d) { return String(d.modelId) === String(design.screenModelId) ? 0 : !d.modelId ? 1 : 2; };
+      send.devices = r.devices.sort(function (a, b) { return rank(a) - rank(b) || String(a.serial).localeCompare(String(b.serial)); });
+      var preset = new URLSearchParams(location.search).get('serial');
+      if (preset && send.devices.some(function (d) { return d.serial === preset && sendDeviceOk(d); })) send.picked[preset] = true;
+      renderSendDevices();
+    }).catch(function (err) { $('sendDevices').innerHTML = '<div class="p-3 text-danger small">' + e(err.message) + '</div>'; });
+  }
+  function doSend() {
+    var serials = Object.keys(send.picked);
+    if (!serials.length) return;
+    var btn = $('sendGo');
+    App.setBusy(btn, true);
+    $('sendResult').innerHTML = '<div class="alert alert-info mb-0"><span class="spinner-border spinner-border-sm me-2"></span>' +
+      (serials.length === 1 ? 'Gönderiliyor; gateway ve etiketin cevabı bekleniyor...' : 'Toplu iş oluşturuluyor...') + '</div>';
+    var body = JSON.stringify({ serials: serials, data: send.data });
+    var url = '/api/designs/' + designId + '/send';
+    var done = function () { App.setBusy(btn, false); };
+    if (serials.length === 1) {
+      fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: body }).then(function (r) {
+        return r.text().then(function (t) {
+          var cls = r.status === 200 ? 'success' : r.status === 202 ? 'warning' : 'danger';
+          var icon = r.status === 200 ? 'ti-circle-check' : r.status === 202 ? 'ti-clock' : 'ti-alert-triangle';
+          var job = r.headers.get('X-Job-Id');
+          $('sendResult').innerHTML = '<div class="alert alert-' + cls + ' mb-0"><i class="ti ' + icon + ' me-2"></i>' + e(t.replace(/^HATA:\s*/, '')) +
+            (job ? ' <a class="ms-1" href="/updates?serial=' + encodeURIComponent(serials[0]) + '">Güncellemeler</a>' : '') + '</div>';
+        });
+      }).catch(function (err) {
+        $('sendResult').innerHTML = '<div class="alert alert-danger mb-0">' + e(err.message) + '</div>';
+      }).then(done);
+      return;
+    }
+    App.apiRequest('POST', url, JSON.parse(body)).then(function (r) {
+      var sk = r.skipped && r.skipped.length ? '<div class="small mt-1">' + r.skipped.length + ' cihaz atlandı: ' + r.skipped.map(function (s) { return e(s.serial + ' (' + s.message + ')'); }).join(', ') + '</div>' : '';
+      $('sendResult').innerHTML = '<div class="alert alert-success mb-0"><i class="ti ti-circle-check me-2"></i>' + r.queued + ' cihaz için toplu iş oluşturuldu. ' +
+        '<a href="/updates/' + r.batchId + '">İlerlemeyi izle</a>' + sk + '</div>';
+    }).catch(function (err) {
+      $('sendResult').innerHTML = '<div class="alert alert-danger mb-0">' + e(err.message) + '</div>';
+    }).then(done);
+  }
+  $('sendPreview').addEventListener('load', function () { this.classList.toggle('px', this.clientWidth >= this.naturalWidth); });
+  $('sendBtn').addEventListener('click', function () { openSend(); });
+  $('sendGo').addEventListener('click', doSend);
+  $('sendSearch').addEventListener('input', renderSendDevices);
+  $('sendDevices').addEventListener('change', function (ev) {
+    var s = ev.target.dataset.serial;
+    if (!s) return;
+    if (ev.target.checked) send.picked[s] = true; else delete send.picked[s];
+    renderSendDevices();
+  });
+  $('sendFields').addEventListener('input', function (ev) {
+    var k = ev.target.dataset.sendField;
+    if (!k) return;
+    send.data[k] = ev.target.value;
+    clearTimeout(send.timer);
+    send.timer = setTimeout(loadSendPreview, 350);
+  });
+
   // ---------------- Baslangic ----------------
   $('undoBtn').addEventListener('click', undo);
   $('redoBtn').addEventListener('click', redo);
@@ -1032,6 +1174,8 @@
     renderDataForm();
     fitZoom();
     refreshAll();
+    // Cihaz sayfasindan "Tasarim Gonder" ile gelindiyse pencereyi ac.
+    if (new URLSearchParams(location.search).get('send') === '1' && me.can['label.send']) openSend();
   }).catch(function (err) {
     $('dMeta').textContent = err.message;
     App.toast(err.message, 'danger');

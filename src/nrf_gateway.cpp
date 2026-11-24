@@ -88,3 +88,43 @@ SendResult NrfGateway_SendLabel(const uint8_t payload[TOTAL_LABEL_BYTES], const 
     result.lastChunkSent = NRF_CHUNK_COUNT - 1;
     return result;
 }
+
+void NrfGateway_OpenTarget(const uint8_t targetAddr[NRF_ADDR_LEN]) {
+    // Adres ters cevrilir: aciklamasi NrfGateway_SendLabel icinde.
+    uint8_t reversedAddr[NRF_ADDR_LEN];
+    for (uint8_t i = 0; i < NRF_ADDR_LEN; i++) {
+        reversedAddr[i] = targetAddr[NRF_ADDR_LEN - 1 - i];
+    }
+    radio.stopListening();
+    radio.openWritingPipe(reversedAddr);
+    radio.openReadingPipe(0, reversedAddr);
+}
+
+void NrfGateway_FlushRx() {
+    uint8_t buf[32];
+    while (radio.available()) {
+        radio.read(buf, sizeof(buf));
+    }
+    radio.flush_rx();
+}
+
+bool NrfGateway_Write(const uint8_t *data, uint8_t len, uint8_t *ackBuf, uint8_t *ackLen) {
+    if (ackLen) *ackLen = 0;
+    bool ok = radio.write(data, len);
+    // Alicinin ACK payload'u (varsa) RX FIFO'ya duser; sonraki gonderimi
+    // tikamamasi icin her durumda tuketilir. Birden fazla varsa sonuncusu kalir.
+    while (radio.isAckPayloadAvailable()) {
+        uint8_t n = radio.getDynamicPayloadSize();
+        uint8_t tmp[32];
+        if (n == 0 || n > 32) {
+            radio.flush_rx();
+            break;
+        }
+        radio.read(tmp, n);
+        if (ackBuf && ackLen) {
+            memcpy(ackBuf, tmp, n);
+            *ackLen = n;
+        }
+    }
+    return ok;
+}

@@ -26,7 +26,7 @@ function normalizeSerial(v) {
 const SELECT_DEVICE = `
   SELECT dv.*, m.code AS model_code, m.name AS model_name, m.width_px, m.height_px,
          d.name AS dealer_name, d.active AS dealer_active, b.name AS branch_name,
-         g.name AS gateway_name, g.state AS gateway_state
+         g.name AS gateway_name, g.state AS gateway_state, g.fw_version AS gateway_fw
     FROM devices dv
     LEFT JOIN screen_models m ON m.id = dv.model_id
     JOIN dealers d ON d.id = dv.dealer_id
@@ -49,6 +49,9 @@ function view(dv) {
     gatewayName: dv.gateway_name,
     gatewayOnline: dv.gateway_id ? hub.isOnline(dv.gateway_id) : false,
     gatewayActive: dv.gateway_state === 'active',
+    gatewayFw: dv.gateway_fw || null,
+    // Resim modu (tasarim gonderme) icin gateway firmware'i yeterli mi; bilinmiyorsa null
+    gatewayImageReady: dv.gateway_fw ? hub.fwAtLeast(dv.gateway_fw, hub.IMAGE_MIN_FW) : null,
     state: dv.state,
     notes: dv.notes,
     lastUpdateAt: dv.last_update_at,
@@ -56,6 +59,8 @@ function view(dv) {
     lastUpdateMessage: dv.last_update_message,
     lastOkAt: dv.last_ok_at,
     lastContent: dv.last_content,
+    designId: dv.design_id,
+    lastImageJobId: dv.last_image_job_id,
     createdAt: dv.created_at,
   };
 }
@@ -156,7 +161,7 @@ async function resolveModelId(v) {
 api.get('/screen-models', requireView, async (req, res) => {
   const all = req.query.all === '1' && req.user.role === 'super_admin';
   res.json(await db.many(
-    `SELECT m.id, m.code, m.name, m.diagonal_in, m.width_px, m.height_px, m.colors, m.active,
+    `SELECT m.id, m.code, m.name, m.diagonal_in, m.width_px, m.height_px, m.colors, m.rotation, m.active,
             (SELECT count(*)::int FROM devices dv WHERE dv.model_id = m.id) AS device_count,
             (SELECT count(*)::int FROM designs ds WHERE ds.screen_model_id = m.id AND NOT ds.archived) AS design_count
        FROM screen_models m ${all ? '' : 'WHERE m.active'} ORDER BY m.diagonal_in, m.colors, m.name`,
@@ -171,17 +176,19 @@ function modelBody(b, current = {}) {
   const height = parseInt(b.height_px ?? current.height_px, 10);
   const diag = b.diagonal_in === '' || b.diagonal_in == null ? (current.diagonal_in ?? null) : Number(b.diagonal_in);
   const colors = b.colors ?? current.colors ?? 'bw';
+  const rotation = parseInt(b.rotation ?? current.rotation ?? 0, 10);
   if (!code) fail(400, 'Model kodu gerekli (örnek EPD29-BW).');
   if (!name) fail(400, 'Model adı gerekli.');
   if (!(width >= 16 && width <= 2000 && height >= 16 && height <= 2000)) fail(400, 'Çözünürlük 16-2000 piksel arası olmalı.');
-  if (!['bw', 'bwr', 'bwy', 'color'].includes(colors)) fail(400, 'Renk tipi geçersiz.');
+  if (!['bw', 'bwr', 'bwy', 'bwry', 'color'].includes(colors)) fail(400, 'Renk tipi geçersiz.');
+  if (![0, 90, 180, 270].includes(rotation)) fail(400, 'Panel yönü 0, 90, 180 veya 270 derece olmalı.');
   if (diag !== null && !(diag > 0 && diag < 100)) fail(400, 'Ekran boyutu (inç) geçersiz.');
-  return { code, name, width, height, diag, colors, active: b.active !== undefined ? !!b.active : (current.active ?? true) };
+  return { code, name, width, height, diag, colors, rotation, active: b.active !== undefined ? !!b.active : (current.active ?? true) };
 }
 api.post('/screen-models', auth.requireApi('settings.manage'), async (req, res) => {
   const m = modelBody(req.body || {});
   try {
-    const row = await db.one('INSERT INTO screen_models (code, name, diagonal_in, width_px, height_px, colors) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *', [m.code, m.name, m.diag, m.width, m.height, m.colors]);
+    const row = await db.one('INSERT INTO screen_models (code, name, diagonal_in, width_px, height_px, colors, rotation) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *', [m.code, m.name, m.diag, m.width, m.height, m.colors, m.rotation]);
     await audit.log(req.user, 'screen_model.created', { entityType: 'screen_model', entityId: row.id, dealerId: null, branchId: null, message: `${m.name} ${m.width}x${m.height}` });
     res.json(row);
   } catch (err) {
@@ -198,8 +205,8 @@ api.post('/screen-models/:id', auth.requireApi('settings.manage'), async (req, r
     fail(400, 'Bu model tasarım veya cihazlarda kullanılıyor; çözünürlüğü ve renk tipi değiştirilemez. Yeni bir model ekleyin.');
   }
   try {
-    const row = await db.one('UPDATE screen_models SET code = $2, name = $3, diagonal_in = $4, width_px = $5, height_px = $6, colors = $7, active = $8 WHERE id = $1 RETURNING *',
-      [cur.id, m.code, m.name, m.diag, m.width, m.height, m.colors, m.active]);
+    const row = await db.one('UPDATE screen_models SET code = $2, name = $3, diagonal_in = $4, width_px = $5, height_px = $6, colors = $7, active = $8, rotation = $9 WHERE id = $1 RETURNING *',
+      [cur.id, m.code, m.name, m.diag, m.width, m.height, m.colors, m.active, m.rotation]);
     await audit.log(req.user, 'screen_model.updated', { entityType: 'screen_model', entityId: cur.id, dealerId: null, branchId: null, message: m.name });
     res.json(row);
   } catch (err) {

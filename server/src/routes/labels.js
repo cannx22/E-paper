@@ -83,13 +83,20 @@ function newCache() {
 api.post('/send', auth.requireApi('label.send'), async (req, res) => {
   const target = await resolveTarget(req.user, req.body.serial, req.body.gatewayId, newCache());
   const fields = cleanFields(req.body || {});
-  const [job] = await db.tx((c) => queue.enqueue(c, [{ ...target, fields }], { priority: 10, user: req.user }));
+  await sendSingle(res, { ...target, fields }, req.user);
+});
+
+// Tekli gonderimi kuyruga ekler ve ilk denemenin sonucunu metin olarak doner
+// (etiket formu ve tasarim gonderimi ortak kullanir).
+async function sendSingle(res, item, user, waitMs = SINGLE_WAIT_MS) {
+  const target = item;
+  const [job] = await db.tx((c) => queue.enqueue(c, [item], { priority: 10, user }));
   res.setHeader('X-Job-Id', String(job.id));
   if (!hub.isOnline(target.gatewayId)) {
     queue.kick();
     return res.status(202).type('text').send('Gateway çevrimdışı; güncelleme sıraya alındı. Gateway bağlanınca otomatik gönderilecek.');
   }
-  const wait = queue.waitForAttempt(job.id, SINGLE_WAIT_MS);
+  const wait = queue.waitForAttempt(job.id, waitMs);
   queue.kick();
   const r = await wait;
   if (r.status === 'success') return res.status(200).type('text').send(r.message || 'OK');
@@ -99,7 +106,7 @@ api.post('/send', auth.requireApi('label.send'), async (req, res) => {
     ? `İlk deneme başarısız (${String(r.message || '').replace(/^HATA:\s*/, '')}). ${Math.round(r.retryIn)} sn sonra otomatik tekrar denenecek (deneme ${r.attempt}/${r.maxAttempts}).`
     : String(r.message || 'Güncelleme sırada.');
   res.status(202).type('text').send(retry);
-});
+}
 
 // Toplu gonderim. Iki bicim:
 //   { name, items: [{ serial, gatewayId?, fields }] }   satir bazli icerik (Excel)
@@ -133,9 +140,15 @@ api.post('/updates', auth.requireApi('label.send'), async (req, res) => {
     return res.status(400).json({ batchId: null, queued: 0, skipped });
   }
 
-  const dealers = [...new Set(valid.map((v) => v.dealerId))];
   const name = String(b.name || '').trim().slice(0, 120) || `Toplu güncelleme (${valid.length} cihaz)`;
   const source = ['bulk', 'excel', 'api'].includes(b.source) ? b.source : 'bulk';
+  const r = await createBatch(user, valid, name, source);
+  res.json({ ...r, skipped });
+});
+
+// Toplu is olusturur ve isleri kuyruga ekler (etiket ve tasarim gonderimi ortak).
+async function createBatch(user, valid, name, source) {
+  const dealers = [...new Set(valid.map((v) => v.dealerId))];
   const result = await db.tx(async (c) => {
     const batch = (await c.query(
       `INSERT INTO update_batches (dealer_id, branch_id, name, source, created_by, username, total)
@@ -146,7 +159,7 @@ api.post('/updates', auth.requireApi('label.send'), async (req, res) => {
     return batch;
   });
   queue.kick();
-  res.json({ batchId: result.id, queued: valid.length, skipped, crossDealer: dealers.length > 1 && isCentral(user) });
-});
+  return { batchId: result.id, queued: valid.length, crossDealer: dealers.length > 1 && isCentral(user) };
+}
 
-module.exports = { api };
+module.exports = { api, resolveTarget, newCache, sendSingle, createBatch };
