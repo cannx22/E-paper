@@ -741,12 +741,20 @@
         (hasColor ? '<label class="form-label mt-2">Renk modu</label><select class="form-select" data-prop="colorMode">' +
           '<option value="color"' + (colorImg ? ' selected' : '') + '>Renkli (' + e(COLOR_TYPES[doc.colors] || doc.colors) + ')</option>' +
           '<option value="mono"' + (colorImg ? '' : ' selected') + '>Tek renk (eşik + mürekkep)</option></select>' : '') +
-        '<label class="form-check mt-2 mb-1"><input class="form-check-input" type="checkbox" data-prop="dither"' + (el.dither !== false ? ' checked' : '') + '><span class="form-check-label">Titreklestirme (fotoğraflar için)</span></label>' +
+        (colorImg ?
+          '<label class="form-label mt-2">Görsel türü</label><select class="form-select" data-prop="imageStyle">' +
+          [['auto', 'Otomatik algıla (önerilen)'], ['photo', 'Fotoğraf (tonlu)'], ['logo', 'Logo / düz renk (noktasız)']].map(function (o) {
+            return '<option value="' + o[0] + '"' + (DR.imageStyle(el) === o[0] ? ' selected' : '') + '>' + o[1] + '</option>';
+          }).join('') + '</select>' +
+          '<label class="form-label mt-2">Renk netliği: <span id="snapVal">' + (el.imageSnap == null ? 60 : el.imageSnap) + '</span></label>' +
+          '<input type="range" class="form-range" min="0" max="100" data-prop="imageSnap" data-type="num" value="' + (el.imageSnap == null ? 60 : el.imageSnap) + '">' +
+          '<div class="d-flex justify-content-between small text-secondary" style="margin-top:-4px"><span>Yumuşak geçiş</span><span>Net siyah/beyaz</span></div>'
+          : '<label class="form-check mt-2 mb-1"><input class="form-check-input" type="checkbox" data-prop="dither"' + (el.dither !== false ? ' checked' : '') + '><span class="form-check-label">Titreklestirme (fotoğraflar için)</span></label>') +
         (colorImg ? '' :
           '<label class="form-label">Eşik: <span id="thrVal">' + (el.threshold || 128) + '</span></label><input type="range" class="form-range" min="20" max="235" data-prop="threshold" data-type="num" value="' + (el.threshold || 128) + '">' +
           '<label class="form-label mt-1">Mürekkep rengi</label>' + swatches('color', el.color || 'black')) +
         '<div class="form-hint mt-2">' + (colorImg
-          ? 'Görselin renkleri panelin renklerine (siyah, beyaz' + (DR.PALETTES[doc.colors].yellow ? ', kırmızı, sarı' : doc.colors === 'bwy' ? ', sarı' : ', kırmızı') + ') çevrilir. Fotoğraflarda titreklestirme açık kalsın; düz renkli logolarda kapatın.'
+          ? 'Görselin renkleri panelin renklerine (siyah, beyaz' + (DR.PALETTES[doc.colors].yellow ? ', kırmızı, sarı' : doc.colors === 'bwy' ? ', sarı' : ', kırmızı') + ') çevrilir. Koyu tonlar siyaha, açık tonlar beyaza oturur; griye kırmızı/sarı nokta düşmez. Daha net görüntü için Renk netliğini artırın.'
           : 'E-paper ekranda gri ton yoktur; görsel tek renge çevrilir. Logolar için titreklestirmeyi kapatıp eşiği ayarlayın.') + '</div>');
     } else if (el.type === 'barcode') {
       html += section('Barkod ayarları',
@@ -781,7 +789,7 @@
   }
   function setProp(el, prop, v) {
     if (v === undefined) return;
-    if (['x', 'y', 'w', 'h', 'size', 'strokeWidth', 'radius', 'maxLines', 'threshold'].indexOf(prop) !== -1) v = round(v);
+    if (['x', 'y', 'w', 'h', 'size', 'strokeWidth', 'radius', 'maxLines', 'threshold', 'imageSnap'].indexOf(prop) !== -1) v = round(v);
     if ((prop === 'w' || prop === 'h') && v < 1) v = 1;
     if (prop === 'name') v = String(v).slice(0, 60);
     el[prop] = v;
@@ -796,6 +804,7 @@
     if (!el) return;
     setProp(el, inp.dataset.prop, readInput(inp));
     if (inp.dataset.prop === 'threshold' && $('thrVal')) $('thrVal').textContent = inp.value;
+    if (inp.dataset.prop === 'imageSnap' && $('snapVal')) $('snapVal').textContent = inp.value;
     scheduleRender(); drawOverlay(); renderLayers(); updateState();
   });
   propsEl.addEventListener('change', function (ev) {

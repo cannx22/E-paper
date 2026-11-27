@@ -12,7 +12,8 @@
 //     ellipse : fill, stroke, strokeWidth
 //     line    : color, dashed  (kutu: yatay cizgi icin h = kalinlik)
 //     image   : src (data URL), fit(contain|cover|stretch), dither(bool), threshold,
-//               colorMode('color'|'mono'; renkli panelde varsayilan 'color'), color (mono murekkebi)
+//               colorMode('color'|'mono'; renkli panelde varsayilan 'color'), color (mono murekkebi),
+//               imageStyle('auto'|'photo'|'logo'), imageSnap(0-100 renk netligi)
 //     barcode : format(EAN13|CODE128), value, showText, color
 //     qr      : value, color
 //   Renkler: 'black' | 'white' | 'accent' (bwr/bwry: kirmizi, bwy: sari; bw'de siyah)
@@ -270,52 +271,224 @@
 
   // ---------------- Gorsel ----------------
   // Gorselin panel renklerine cevrilmesi:
-  //   colorMode 'color' (renkli panellerde varsayilan): her piksel panelin
-  //     paletindeki (siyah, beyaz, kirmizi, sari) en yakin renge indirgenir;
-  //     dither acikken hata Floyd-Steinberg ile RGB'de dagitilir.
-  //   colorMode 'mono': eski davranis - parlaklik + esik, tek murekkep rengi.
+  //   colorMode 'color' (renkli panellerde varsayilan): asagidaki "yakin renge
+  //     oturtma" yontemi.
+  //   colorMode 'mono': parlaklik + esik, tek murekkep rengi.
   // Beyaz pikseller saydam birakilir (alttaki sekil/arka plan gorunur).
+  //
+  // Renkli mod, her piksel icin:
+  //   Aday renkler: siyah + beyaz; piksel yeterince renkliyse tonu yakin olan
+  //   panel renkleri (kirmizi/sari) de eklenir. Boylece gri ve mavi/yesil
+  //   alanlara asla kirmizi/sari nokta dusmez.
+  //   Logo (duz renk): titreklestirme yok; en yakin adaya oturtulur (koyu gri ->
+  //     siyah, acik gri -> beyaz, kirmiziya yakin -> kirmizi), tek kalan
+  //     kenar pikselleri temizlenir.
+  //   Fotograf: kontrast + ton egrisi (koyu tonlar siyaha, acik tonlar beyaza
+  //     kademeli itilir), sonra adaylar arasinda yilan tarama Floyd-Steinberg.
+  // imageStyle: 'auto' (varsayilan, otomatik algilar) | 'photo' | 'logo'
+  // imageSnap: 0-100 renk netligi (yuksek = daha cok siyah/beyaza oturt), varsayilan 60
   function imageColorMode(el, colors) {
     if (el.colorMode === 'mono') return 'mono';
     var p = PALETTES[colors];
     return p && p.accent ? 'color' : 'mono';
   }
-  // Algisal agirlikli uzaklik ("redmean"): duz RGB'ye gore turuncu/ten
-  // tonlarini daha dogru siniflar.
+  function imageStyle(el) {
+    if (el.imageStyle === 'photo' || el.imageStyle === 'logo' || el.imageStyle === 'auto') return el.imageStyle;
+    // Eski kayitlar: titreklestirmeyi kapatmis kullanici logo istemistir.
+    return el.dither === false ? 'logo' : 'auto';
+  }
+  // Algisal agirlikli uzaklik ("redmean"), kanal basina olcege indirgenmis (0-255).
   function colorDist(r, g, b, c) {
     var rm = (r + c[0]) / 2, dr = r - c[0], dg = g - c[1], db = b - c[2];
-    return (2 + rm / 256) * dr * dr + 4 * dg * dg + (2 + (255 - rm) / 256) * db * db;
+    return Math.sqrt(((2 + rm / 256) * dr * dr + 4 * dg * dg + (2 + (255 - rm) / 256) * db * db) / 9);
   }
+  function hueOf(r, g, b) {
+    var mx = Math.max(r, g, b), mn = Math.min(r, g, b), d = mx - mn;
+    if (d === 0) return -1;
+    var hh = mx === r ? ((g - b) / d) % 6 : mx === g ? (b - r) / d + 2 : (r - g) / d + 4;
+    hh *= 60;
+    return hh < 0 ? hh + 360 : hh;
+  }
+  function hueDiff(a, b) { var d = Math.abs(a - b) % 360; return d > 180 ? 360 - d : d; }
+  function lumOf(r, g, b) { return 0.299 * r + 0.587 * g + 0.114 * b; }
+
+  // Fotograf mi logo mu: arka plan (beyaz/siyah) disindaki piksellerin
+  // %80'i 16 renk kutusuna siginiyorsa duz renkli (logo) kabul edilir.
+  function detectStyle(px, n) {
+    var hist = {}, total = 0;
+    for (var i = 0; i < n; i++) {
+      var r = px[i * 4], g = px[i * 4 + 1], b = px[i * 4 + 2];
+      var mx = Math.max(r, g, b), mn = Math.min(r, g, b);
+      if (mn > 235 || mx < 20) continue;
+      var key = ((r >> 4) << 8) | ((g >> 4) << 4) | (b >> 4);
+      hist[key] = (hist[key] || 0) + 1; total++;
+    }
+    if (total < 50) return 'logo';
+    var counts = Object.keys(hist).map(function (k) { return hist[k]; }).sort(function (a, b) { return b - a; });
+    var top = 0;
+    for (var j = 0; j < Math.min(16, counts.length); j++) top += counts[j];
+    return top / total >= 0.8 ? 'logo' : 'photo';
+  }
+  // Fotograf on isleme: otomatik seviye (kontrast), hafif doygunluk, keskinlestirme.
+  function enhancePhoto(buf, w, h) {
+    var n = w * h, hist = new Uint32Array(256), i, c;
+    for (i = 0; i < n; i++) hist[Math.max(0, Math.min(255, Math.round(lumOf(buf[i * 3], buf[i * 3 + 1], buf[i * 3 + 2]))))]++;
+    var lo = 0, hi = 255, acc = 0;
+    for (i = 0; i < 256; i++) { acc += hist[i]; if (acc >= n * 0.005) { lo = i; break; } }
+    acc = 0;
+    for (i = 255; i >= 0; i--) { acc += hist[i]; if (acc >= n * 0.005) { hi = i; break; } }
+    var ok = hi - lo >= 40, scale = ok ? 255 / (hi - lo) : 1, off = ok ? lo : 0;
+    for (i = 0; i < n; i++) {
+      var r = (buf[i * 3] - off) * scale, g = (buf[i * 3 + 1] - off) * scale, b = (buf[i * 3 + 2] - off) * scale;
+      var l = lumOf(r, g, b);
+      buf[i * 3] = l + (r - l) * 1.1; buf[i * 3 + 1] = l + (g - l) * 1.1; buf[i * 3 + 2] = l + (b - l) * 1.1;
+    }
+    // Keskinlestirme (unsharp mask, 3x3 kutu bulaniklik, miktar 0.5)
+    var src = new Float32Array(buf);
+    for (var y = 1; y < h - 1; y++) for (var x = 1; x < w - 1; x++) {
+      for (c = 0; c < 3; c++) {
+        var sum = 0;
+        for (var dy = -1; dy <= 1; dy++) for (var dx = -1; dx <= 1; dx++) sum += src[((y + dy) * w + x + dx) * 3 + c];
+        var k = (y * w + x) * 3 + c;
+        buf[k] = src[k] + 0.5 * (src[k] - sum / 9);
+      }
+    }
+    for (i = 0; i < n * 3; i++) buf[i] = Math.max(0, Math.min(255, buf[i]));
+  }
+
   function drawImageColor(px, w, h, el, colors) {
     var p = PALETTES[colors];
-    var pal = [p.black, p.white];
-    if (p.accent) pal.push(p.accent);
-    if (p.yellow) pal.push(p.yellow);
-    var n = w * h, buf = new Float32Array(n * 3), i, k;
+    var chroma = [];
+    if (p.accent) chroma.push(p.accent);
+    if (p.yellow) chroma.push(p.yellow);
+    var chromaHue = chroma.map(function (c) { return hueOf(c[0], c[1], c[2]); });
+    var colorsArr = [p.black, p.white].concat(chroma); // 0 siyah, 1 beyaz, 2+ renk
+    var n = w * h, i, k, x, y;
+    var style = imageStyle(el);
+    if (style === 'auto') style = detectStyle(px, n);
+    var logo = style === 'logo';
+    var buf = new Float32Array(n * 3);
     for (i = 0; i < n; i++) { buf[i * 3] = px[i * 4]; buf[i * 3 + 1] = px[i * 4 + 1]; buf[i * 3 + 2] = px[i * 4 + 2]; }
-    var dither = el.dither !== false;
-    var spread = function (j, f, er, eg, eb) { j *= 3; buf[j] += er * f; buf[j + 1] += eg * f; buf[j + 2] += eb * f; };
-    for (var y = 0; y < h; y++) for (var x = 0; x < w; x++) {
-      k = y * w + x;
-      var r = Math.max(0, Math.min(255, buf[k * 3])), g = Math.max(0, Math.min(255, buf[k * 3 + 1])), b = Math.max(0, Math.min(255, buf[k * 3 + 2]));
-      var best = pal[0], bd = Infinity;
-      for (var q = 0; q < pal.length; q++) { var d = colorDist(r, g, b, pal[q]); if (d < bd) { bd = d; best = pal[q]; } }
-      var isWhite = best === p.white;
-      px[k * 4] = isWhite ? 255 : best[0]; px[k * 4 + 1] = isWhite ? 255 : best[1]; px[k * 4 + 2] = isWhite ? 255 : best[2];
-      px[k * 4 + 3] = isWhite ? 0 : 255;
-      if (!dither) continue;
-      var er = r - best[0], eg = g - best[1], eb = b - best[2];
-      if (x + 1 < w) spread(k + 1, 7 / 16, er, eg, eb);
-      if (y + 1 < h) {
-        if (x > 0) spread(k + w - 1, 3 / 16, er, eg, eb);
-        spread(k + w, 5 / 16, er, eg, eb);
-        if (x + 1 < w) spread(k + w + 1, 1 / 16, er, eg, eb);
+    var S = Math.max(0, Math.min(100, el.imageSnap == null ? 60 : Number(el.imageSnap)));
+    if (!logo) {
+      // Fotograf: kontrast/doygunluk/keskinlik, sonra ton egrisi: darkL altindaki
+      // koyu tonlar siyaha, lightL ustundeki acik tonlar beyaza gider; arasi
+      // kademeli gerilir (sert sinir olusmaz, duz alanlar noktasiz kalir).
+      enhancePhoto(buf, w, h);
+      var darkL = 10 + S * 0.3, lightL = 248 - S * 0.25, st = 255 / (lightL - darkL);
+      for (i = 0; i < n * 3; i++) buf[i] = Math.max(0, Math.min(255, (buf[i] - darkL) * st));
+    }
+    var orig = new Float32Array(buf);
+    var out = new Int8Array(n);
+
+    function candidates(r, g, b) {
+      var list = [0, 1];
+      if (Math.max(r, g, b) - Math.min(r, g, b) >= 45) {
+        var hu = hueOf(r, g, b);
+        for (var q = 0; q < chroma.length; q++) if (hueDiff(hu, chromaHue[q]) <= 40) list.push(q + 2);
       }
+      return list;
+    }
+    function nearest(r, g, b, list) {
+      var best = list[0], bd = Infinity;
+      for (var q = 0; q < list.length; q++) { var d = colorDist(r, g, b, colorsArr[list[q]]); if (d < bd) { bd = d; best = list[q]; } }
+      return { idx: best, d: bd };
+    }
+    // Fotograf icin yumusak secim: kirmizi/sari, orijinal piksel grilestikce ve
+    // tonu uzaklastikca kademeli artan bir cezayla secilir. Sert esik yerine
+    // kademeli ceza oldugu icin renk gecislerinde cizgi/sinir olusmaz.
+    function chromaPenalty(r, g, b) {
+      var C = Math.max(r, g, b) - Math.min(r, g, b), hu = hueOf(r, g, b), pen = [0, 0];
+      // Soluk / toprak tonlari (kahverengi, pastel) da gri sayilir: panelin
+      // kirmizi/sarisi canli renklerdir, orta ton dolgusu olarak kullanilmaz.
+      var grey = Math.max(0, Math.min(1, (100 - C) / 50));
+      for (var q = 0; q < chroma.length; q++) {
+        var off = hu < 0 ? 1 : Math.max(0, Math.min(1, (hueDiff(hu, chromaHue[q]) - 12) / 60));
+        pen.push(240 * Math.max(grey, off));
+      }
+      return pen;
+    }
+    function nearestPen(r, g, b, pen) {
+      var best = 0, bd = Infinity;
+      // Parlaklik farki agirlikli: doygun mor/mavi RGB'de beyaza yakin gorunse de
+      // goz onu koyu gorur; siyah/beyaz karari parlakliga gore verilmeli.
+      var L = lumOf(r, g, b);
+      for (var q = 0; q < colorsArr.length; q++) {
+        var c = colorsArr[q], cd = colorDist(r, g, b, c), dL = L - lumOf(c[0], c[1], c[2]);
+        var d = Math.sqrt(2 * dL * dL + 0.5 * cd * cd) + pen[q];
+        if (d < bd) { bd = d; best = q; }
+      }
+      return best;
+    }
+    function spread(xx, yy, er, eg, eb, wt) {
+      if (xx < 0 || xx >= w || yy >= h) return;
+      var j = (yy * w + xx) * 3;
+      buf[j] += er * wt; buf[j + 1] += eg * wt; buf[j + 2] += eb * wt;
+    }
+
+    for (y = 0; y < h; y++) {
+      var ltr = y % 2 === 0, dir = ltr ? 1 : -1; // yilan tarama
+      for (var xi = 0; xi < w; xi++) {
+        x = ltr ? xi : w - 1 - xi;
+        k = y * w + x;
+        var or = orig[k * 3], og = orig[k * 3 + 1], ob = orig[k * 3 + 2];
+        var pick;
+        if (logo) {
+          // Logo / duz renk: titreklestirme yok, en yakin renge oturt.
+          // Gri / renksiz ton parlakliga gore siyah ya da beyaz olur.
+          var list = candidates(or, og, ob);
+          if (list.length === 2) pick = lumOf(or, og, ob) < 128 + (S - 60) ? 0 : 1;
+          else pick = nearest(or, og, ob, list).idx;
+        } else {
+          // Fotograf: hata eklenmis renge gore sec ve hatayi dagit.
+          var r = Math.max(0, Math.min(255, buf[k * 3])), g = Math.max(0, Math.min(255, buf[k * 3 + 1])), b = Math.max(0, Math.min(255, buf[k * 3 + 2]));
+          pick = nearestPen(r, g, b, chromaPenalty(or, og, ob));
+          var c = colorsArr[pick];
+          var er = (r - c[0]) * 0.9, eg = (g - c[1]) * 0.9, eb = (b - c[2]) * 0.9;
+          spread(x + dir, y, er, eg, eb, 7 / 16);
+          spread(x - dir, y + 1, er, eg, eb, 3 / 16);
+          spread(x, y + 1, er, eg, eb, 5 / 16);
+          spread(x + dir, y + 1, er, eg, eb, 1 / 16);
+        }
+        out[k] = pick;
+      }
+    }
+
+    // Logo: tek basina kalmis pikselleri (kenar kirintilari) komsularina esitle.
+    if (logo && w > 2 && h > 2) {
+      var copy = new Int8Array(out);
+      for (y = 1; y < h - 1; y++) for (x = 1; x < w - 1; x++) {
+        k = y * w + x;
+        var up = copy[k - w];
+        if (copy[k] !== up && up === copy[k + w] && up === copy[k - 1] && up === copy[k + 1]) out[k] = up;
+      }
+    }
+
+    for (i = 0; i < n; i++) {
+      var col = colorsArr[out[i]], isWhite = out[i] === 1;
+      px[i * 4] = isWhite ? 255 : col[0]; px[i * 4 + 1] = isWhite ? 255 : col[1]; px[i * 4 + 2] = isWhite ? 255 : col[2];
+      px[i * 4 + 3] = isWhite ? 0 : 255;
     }
   }
 
-  // Gorseli kutuya yerlestirir ve panel renklerine (istenirse Floyd-Steinberg
-  // titreklestirme ile) cevirir; e-paper'da ara ton yok.
+  // Buyuk gorseli adim adim yariya indirerek kucultur (tek adimda kucultme
+  // ince detaylarda kirlilik/merdiven yapar).
+  function drawScaled(env, t, img, dx, dy, dw, dh) {
+    var src = img, sw = img.width, sh = img.height;
+    while (sw / 2 >= dw && sh / 2 >= dh && sw > 2 && sh > 2) {
+      var nw = Math.max(1, Math.round(sw / 2)), nh = Math.max(1, Math.round(sh / 2));
+      var c = env.createCanvas(nw, nh), g = c.getContext('2d');
+      g.imageSmoothingEnabled = true;
+      g.imageSmoothingQuality = 'high';
+      g.drawImage(src, 0, 0, sw, sh, 0, 0, nw, nh);
+      src = c; sw = nw; sh = nh;
+    }
+    t.imageSmoothingEnabled = true;
+    t.imageSmoothingQuality = 'high';
+    t.drawImage(src, 0, 0, sw, sh, dx, dy, dw, dh);
+  }
+
+  // Gorseli kutuya yerlestirir ve panel renklerine cevirir; e-paper'da ara ton yok.
   async function drawImage(ctx, el, colors, env) {
     if (!el.src || !env.loadImage || !env.createCanvas) return;
     var img = await env.loadImage(el.src);
@@ -326,7 +499,7 @@
     var iw = img.width, ih = img.height, fit = el.fit || 'contain';
     var sx = w / iw, sy = h / ih, s = fit === 'cover' ? Math.max(sx, sy) : Math.min(sx, sy);
     var dw = fit === 'stretch' ? w : iw * s, dh = fit === 'stretch' ? h : ih * s;
-    t.drawImage(img, (w - dw) / 2, (h - dh) / 2, dw, dh);
+    drawScaled(env, t, img, (w - dw) / 2, (h - dh) / 2, dw, dh);
     var id = t.getImageData(0, 0, w, h), px = id.data, thr = el.threshold || 128;
     if (imageColorMode(el, colors) === 'color') {
       drawImageColor(px, w, h, el, colors);
@@ -337,17 +510,21 @@
     var lum = new Float32Array(w * h);
     for (var i = 0; i < w * h; i++) {
       var a = px[i * 4 + 3] / 255;
-      lum[i] = (0.299 * px[i * 4] + 0.587 * px[i * 4 + 1] + 0.114 * px[i * 4 + 2]) * a + 255 * (1 - a);
+      lum[i] = lumOf(px[i * 4], px[i * 4 + 1], px[i * 4 + 2]) * a + 255 * (1 - a);
     }
-    for (var y = 0; y < h; y++) for (var x = 0; x < w; x++) {
-      var k = y * w + x, old = lum[k], nv = old < thr ? 0 : 255, err = old - nv;
-      lum[k] = nv;
-      if (el.dither !== false) {
-        if (x + 1 < w) lum[k + 1] += err * 7 / 16;
-        if (y + 1 < h) {
-          if (x > 0) lum[k + w - 1] += err * 3 / 16;
-          lum[k + w] += err * 5 / 16;
-          if (x + 1 < w) lum[k + w + 1] += err / 16;
+    for (var y = 0; y < h; y++) {
+      var ltr = y % 2 === 0, dir = ltr ? 1 : -1;
+      for (var xi = 0; xi < w; xi++) {
+        var x = ltr ? xi : w - 1 - xi;
+        var k = y * w + x, old = lum[k], nv = old < thr ? 0 : 255, err = old - nv;
+        lum[k] = nv;
+        if (el.dither !== false) {
+          if (x + dir >= 0 && x + dir < w) lum[k + dir] += err * 7 / 16;
+          if (y + 1 < h) {
+            if (x - dir >= 0 && x - dir < w) lum[k + w - dir] += err * 3 / 16;
+            lum[k + w] += err * 5 / 16;
+            if (x + dir >= 0 && x + dir < w) lum[k + w + dir] += err / 16;
+          }
         }
       }
     }
@@ -461,7 +638,7 @@
     FONTS: FONTS, FIELDS: FIELDS, PALETTES: PALETTES,
     render: render, quantize: quantize, resolve: resolve, sampleData: sampleData, dataFromLabelFields: dataFromLabelFields,
     emptyDoc: emptyDoc, scaleDoc: scaleDoc, validate: validate, usedFields: usedFields, newId: newId, css: css,
-    imageColorMode: imageColorMode,
+    imageColorMode: imageColorMode, imageStyle: imageStyle,
     ean13: ean13, code128: code128,
   };
 });
