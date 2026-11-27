@@ -24,7 +24,7 @@ function normalizeSerial(v) {
 }
 
 const SELECT_DEVICE = `
-  SELECT dv.*, m.code AS model_code, m.name AS model_name, m.width_px, m.height_px,
+  SELECT dv.*, m.code AS model_code, m.name AS model_name, m.width_px, m.height_px, m.colors AS model_colors, m.diagonal_in AS model_diagonal,
          d.name AS dealer_name, d.active AS dealer_active, b.name AS branch_name,
          g.name AS gateway_name, g.state AS gateway_state, g.fw_version AS gateway_fw
     FROM devices dv
@@ -41,6 +41,10 @@ function view(dv) {
     modelCode: dv.model_code,
     modelName: dv.model_name,
     resolution: dv.width_px ? `${dv.width_px}x${dv.height_px}` : null,
+    modelWidth: dv.width_px || null,
+    modelHeight: dv.height_px || null,
+    modelColors: dv.model_colors || null,
+    modelDiagonal: dv.model_diagonal != null ? Number(dv.model_diagonal) : null,
     dealerId: dv.dealer_id,
     dealerName: dv.dealer_name,
     branchId: dv.branch_id,

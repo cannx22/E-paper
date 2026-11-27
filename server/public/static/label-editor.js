@@ -56,15 +56,42 @@ var deviceMap = {};
 
 function isValidSerial(s){ return /^\d{8}$/.test(s); }
 
+// Alan modu (bu sayfa) sabit 2.13" (250x122) sablonlari cizer. Hedef cihazin
+// ekrani biliniyorsa onizleme basliginda gosterilir; farkli bir ekransa
+// kullanici tasarim (resim modu) gondermeye yonlendirilir.
+var LEGACY_W = 250, LEGACY_H = 122;
+var COLOR_NAMES = { bw: 'Siyah-Beyaz', bwr: 'Siyah-Beyaz-Kırmızı', bwy: 'Siyah-Beyaz-Sarı', bwry: 'Siyah-Beyaz-Kırmızı-Sarı', color: 'Renkli' };
+function updateScreenInfo(d){
+  var badge = document.getElementById('screenBadge');
+  var warn = document.getElementById('screenWarn');
+  if (!d || !d.modelId || !d.modelWidth){
+    badge.className = 'badge bg-secondary-lt';
+    badge.textContent = '2.13" · ' + LEGACY_W + '×' + LEGACY_H;
+    badge.title = d && !d.modelId ? 'Bu cihazın ekran modeli tanımlı değil; Cihazlar sayfasından seçin.' : 'Alan modu şablonları 2.13" ekran içindir';
+    warn.hidden = true;
+    return;
+  }
+  var diag = d.modelDiagonal ? String(d.modelDiagonal).replace('.', ',') + '" · ' : '';
+  var legacy = Math.max(d.modelWidth, d.modelHeight) === LEGACY_W && Math.min(d.modelWidth, d.modelHeight) <= 128;
+  badge.className = 'badge ' + (legacy ? 'bg-green-lt' : 'bg-yellow-lt');
+  badge.textContent = diag + d.modelWidth + '×' + d.modelHeight + (d.modelColors ? ' · ' + (COLOR_NAMES[d.modelColors] || d.modelColors) : '');
+  badge.title = d.modelName || '';
+  if (legacy){ warn.hidden = true; return; }
+  warn.hidden = false;
+  warn.innerHTML = '<i class="ti ti-alert-triangle me-1"></i>Bu cihazın ekranı <b>' + escapeHtml(d.modelName || '') + '</b> (' + d.modelWidth + '×' + d.modelHeight + '). ' +
+    'Bu sayfadaki şablonlar 2.13" (' + LEGACY_W + '×' + LEGACY_H + ') ekran içindir. Bu ekrana uygun görüntü için <a href="/designs">Tasarımlar</a> sayfasından bir tasarım seçip <b>Etikete Gönder</b> düğmesini kullanın.';
+}
+
 function updateDeviceInfo(){
   var el = document.getElementById('deviceInfo');
   var s = serialInput.value.trim();
   var d = deviceMap[s];
+  updateScreenInfo(isValidSerial(s) ? d : null);
   if (!s){ el.textContent = ''; return; }
   if (!isValidSerial(s)){ el.className = 'form-hint text-danger'; el.textContent = 'Seri no 8 haneli rakam olmalı.'; return; }
   if (!d){ el.className = 'form-hint'; el.textContent = 'Kayıtlı olmayan cihaz - seçili gateway üzerinden gönderilir.'; return; }
   el.className = 'form-hint ' + (d.state === 'active' ? 'text-success' : 'text-danger');
-  el.textContent = (d.name || 'Kayıtlı cihaz') + (d.modelName ? ' · ' + d.modelName : '') +
+  el.textContent = (d.name || 'Kayıtlı cihaz') + (d.modelName ? ' · ' + d.modelName + (d.modelWidth ? ' (' + d.modelWidth + '×' + d.modelHeight + ')' : '') : ' · ekran modeli tanımsız') +
     (d.state !== 'active' ? ' · DEVRE DIŞI' : '') + (d.gatewayName ? '' : ' · gateway atanmamış');
   if (d.gatewayId && gatewayList.some(function(g){ return g.id === d.gatewayId; })){
     gatewaySelect.value = d.gatewayId;

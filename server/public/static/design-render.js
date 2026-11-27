@@ -11,7 +11,8 @@
 //     rect    : fill(renk|null), stroke(renk|null), strokeWidth, radius
 //     ellipse : fill, stroke, strokeWidth
 //     line    : color, dashed  (kutu: yatay cizgi icin h = kalinlik)
-//     image   : src (data URL), fit(contain|cover|stretch), dither(bool), threshold
+//     image   : src (data URL), fit(contain|cover|stretch), dither(bool), threshold,
+//               colorMode('color'|'mono'; renkli panelde varsayilan 'color'), color (mono murekkebi)
 //     barcode : format(EAN13|CODE128), value, showText, color
 //     qr      : value, color
 //   Renkler: 'black' | 'white' | 'accent' (bwr/bwry: kirmizi, bwy: sari; bw'de siyah)
@@ -268,8 +269,53 @@
   }
 
   // ---------------- Gorsel ----------------
-  // Gorseli kutuya yerlestirir ve siyah-beyaza (istenirse Floyd-Steinberg
-  // titreklestirme ile) cevirir; e-paper'da gri ton yok.
+  // Gorselin panel renklerine cevrilmesi:
+  //   colorMode 'color' (renkli panellerde varsayilan): her piksel panelin
+  //     paletindeki (siyah, beyaz, kirmizi, sari) en yakin renge indirgenir;
+  //     dither acikken hata Floyd-Steinberg ile RGB'de dagitilir.
+  //   colorMode 'mono': eski davranis - parlaklik + esik, tek murekkep rengi.
+  // Beyaz pikseller saydam birakilir (alttaki sekil/arka plan gorunur).
+  function imageColorMode(el, colors) {
+    if (el.colorMode === 'mono') return 'mono';
+    var p = PALETTES[colors];
+    return p && p.accent ? 'color' : 'mono';
+  }
+  // Algisal agirlikli uzaklik ("redmean"): duz RGB'ye gore turuncu/ten
+  // tonlarini daha dogru siniflar.
+  function colorDist(r, g, b, c) {
+    var rm = (r + c[0]) / 2, dr = r - c[0], dg = g - c[1], db = b - c[2];
+    return (2 + rm / 256) * dr * dr + 4 * dg * dg + (2 + (255 - rm) / 256) * db * db;
+  }
+  function drawImageColor(px, w, h, el, colors) {
+    var p = PALETTES[colors];
+    var pal = [p.black, p.white];
+    if (p.accent) pal.push(p.accent);
+    if (p.yellow) pal.push(p.yellow);
+    var n = w * h, buf = new Float32Array(n * 3), i, k;
+    for (i = 0; i < n; i++) { buf[i * 3] = px[i * 4]; buf[i * 3 + 1] = px[i * 4 + 1]; buf[i * 3 + 2] = px[i * 4 + 2]; }
+    var dither = el.dither !== false;
+    var spread = function (j, f, er, eg, eb) { j *= 3; buf[j] += er * f; buf[j + 1] += eg * f; buf[j + 2] += eb * f; };
+    for (var y = 0; y < h; y++) for (var x = 0; x < w; x++) {
+      k = y * w + x;
+      var r = Math.max(0, Math.min(255, buf[k * 3])), g = Math.max(0, Math.min(255, buf[k * 3 + 1])), b = Math.max(0, Math.min(255, buf[k * 3 + 2]));
+      var best = pal[0], bd = Infinity;
+      for (var q = 0; q < pal.length; q++) { var d = colorDist(r, g, b, pal[q]); if (d < bd) { bd = d; best = pal[q]; } }
+      var isWhite = best === p.white;
+      px[k * 4] = isWhite ? 255 : best[0]; px[k * 4 + 1] = isWhite ? 255 : best[1]; px[k * 4 + 2] = isWhite ? 255 : best[2];
+      px[k * 4 + 3] = isWhite ? 0 : 255;
+      if (!dither) continue;
+      var er = r - best[0], eg = g - best[1], eb = b - best[2];
+      if (x + 1 < w) spread(k + 1, 7 / 16, er, eg, eb);
+      if (y + 1 < h) {
+        if (x > 0) spread(k + w - 1, 3 / 16, er, eg, eb);
+        spread(k + w, 5 / 16, er, eg, eb);
+        if (x + 1 < w) spread(k + w + 1, 1 / 16, er, eg, eb);
+      }
+    }
+  }
+
+  // Gorseli kutuya yerlestirir ve panel renklerine (istenirse Floyd-Steinberg
+  // titreklestirme ile) cevirir; e-paper'da ara ton yok.
   async function drawImage(ctx, el, colors, env) {
     if (!el.src || !env.loadImage || !env.createCanvas) return;
     var img = await env.loadImage(el.src);
@@ -282,6 +328,12 @@
     var dw = fit === 'stretch' ? w : iw * s, dh = fit === 'stretch' ? h : ih * s;
     t.drawImage(img, (w - dw) / 2, (h - dh) / 2, dw, dh);
     var id = t.getImageData(0, 0, w, h), px = id.data, thr = el.threshold || 128;
+    if (imageColorMode(el, colors) === 'color') {
+      drawImageColor(px, w, h, el, colors);
+      t.putImageData(id, 0, 0);
+      ctx.drawImage(tmp, Math.round(el.x), Math.round(el.y));
+      return;
+    }
     var lum = new Float32Array(w * h);
     for (var i = 0; i < w * h; i++) {
       var a = px[i * 4 + 3] / 255;
@@ -409,6 +461,7 @@
     FONTS: FONTS, FIELDS: FIELDS, PALETTES: PALETTES,
     render: render, quantize: quantize, resolve: resolve, sampleData: sampleData, dataFromLabelFields: dataFromLabelFields,
     emptyDoc: emptyDoc, scaleDoc: scaleDoc, validate: validate, usedFields: usedFields, newId: newId, css: css,
+    imageColorMode: imageColorMode,
     ean13: ean13, code128: code128,
   };
 });

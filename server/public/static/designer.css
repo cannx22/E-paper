@@ -144,3 +144,5 @@
   .dz-stage { padding: 16px; }
   .dz-hint { display: none; }
 }
+.dz-send-panel { padding: .5rem .75rem; border: 1px solid var(--tblr-border-color); border-radius: var(--tblr-border-radius); background: var(--tblr-bg-surface-secondary); }
+.dz-send-panel .dz-send-stat:empty { display: none; }

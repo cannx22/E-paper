@@ -732,14 +732,22 @@
         '<label class="form-check mt-2 mb-0"><input class="form-check-input" type="checkbox" data-prop="dashed"' + (el.dashed ? ' checked' : '') + '><span class="form-check-label">Kesikli</span></label>' +
         '<div class="form-hint mt-2">Kalınlık için yüksekliği (yatay çizgi) veya genişliği (dikey çizgi) değiştirin.</div>');
     } else if (el.type === 'image') {
+      var hasColor = !!(DR.PALETTES[doc.colors] && DR.PALETTES[doc.colors].accent);
+      var colorImg = DR.imageColorMode(el, doc.colors) === 'color';
       html += section('Görsel ayarları',
         '<button type="button" class="btn btn-sm w-100 mb-2" data-act="replace-image"><i class="ti ti-replace me-1"></i>Görseli değiştir</button>' +
         '<label class="form-label">Yerleşim</label><select class="form-select" data-prop="fit">' +
         [['contain', 'Sığdır'], ['cover', 'Doldur (kırp)'], ['stretch', 'Uzat']].map(function (o) { return '<option value="' + o[0] + '"' + ((el.fit || 'contain') === o[0] ? ' selected' : '') + '>' + o[1] + '</option>'; }).join('') + '</select>' +
+        (hasColor ? '<label class="form-label mt-2">Renk modu</label><select class="form-select" data-prop="colorMode">' +
+          '<option value="color"' + (colorImg ? ' selected' : '') + '>Renkli (' + e(COLOR_TYPES[doc.colors] || doc.colors) + ')</option>' +
+          '<option value="mono"' + (colorImg ? '' : ' selected') + '>Tek renk (eşik + mürekkep)</option></select>' : '') +
         '<label class="form-check mt-2 mb-1"><input class="form-check-input" type="checkbox" data-prop="dither"' + (el.dither !== false ? ' checked' : '') + '><span class="form-check-label">Titreklestirme (fotoğraflar için)</span></label>' +
-        '<label class="form-label">Eşik: <span id="thrVal">' + (el.threshold || 128) + '</span></label><input type="range" class="form-range" min="20" max="235" data-prop="threshold" data-type="num" value="' + (el.threshold || 128) + '">' +
-        '<label class="form-label mt-1">Mürekkep rengi</label>' + swatches('color', el.color || 'black') +
-        '<div class="form-hint mt-2">E-paper ekranda gri ton yoktur; görsel siyah-beyaza çevrilir. Logolar için titreklestirmeyi kapatıp eşiği ayarlayın.</div>');
+        (colorImg ? '' :
+          '<label class="form-label">Eşik: <span id="thrVal">' + (el.threshold || 128) + '</span></label><input type="range" class="form-range" min="20" max="235" data-prop="threshold" data-type="num" value="' + (el.threshold || 128) + '">' +
+          '<label class="form-label mt-1">Mürekkep rengi</label>' + swatches('color', el.color || 'black')) +
+        '<div class="form-hint mt-2">' + (colorImg
+          ? 'Görselin renkleri panelin renklerine (siyah, beyaz' + (DR.PALETTES[doc.colors].yellow ? ', kırmızı, sarı' : doc.colors === 'bwy' ? ', sarı' : ', kırmızı') + ') çevrilir. Fotoğraflarda titreklestirme açık kalsın; düz renkli logolarda kapatın.'
+          : 'E-paper ekranda gri ton yoktur; görsel tek renge çevrilir. Logolar için titreklestirmeyi kapatıp eşiği ayarlayın.') + '</div>');
     } else if (el.type === 'barcode') {
       html += section('Barkod ayarları',
         '<label class="form-label">Tür</label><select class="form-select" data-prop="format"><option value="EAN13"' + (el.format !== 'CODE128' ? ' selected' : '') + '>EAN-13 (market ürünleri)</option><option value="CODE128"' + (el.format === 'CODE128' ? ' selected' : '') + '>Code 128 (harf + rakam)</option></select>' +
@@ -813,6 +821,8 @@
       return;
     }
     commit();
+    // Renk modu degisince esik/murekkep ayarlari gosterilir/gizlenir.
+    if (inp.dataset.prop === 'colorMode') { refreshAll(); return; }
     if (['x', 'y', 'w', 'h'].indexOf(inp.dataset.prop) !== -1) inp.value = selected()[0] ? selected()[0][inp.dataset.prop] : inp.value;
   });
   propsEl.addEventListener('click', function (ev) {
@@ -991,6 +1001,24 @@
     return DR.usedFields(doc).filter(function (k) { var f = DR.FIELDS.find(function (x) { return x.key === k; }); return !f || !f.auto; });
   }
   function sendDeviceOk(d) { return !d.modelId || String(d.modelId) === String(design.screenModelId); }
+  // Cihazin ekrani: '5.83" · 480×648 · Siyah-Beyaz-Kırmızı-Sarı'
+  function deviceScreen(d) {
+    if (!d.modelId) return '';
+    var parts = [];
+    if (d.modelDiagonal) parts.push(String(d.modelDiagonal).replace('.', ',') + '"');
+    if (d.modelWidth) parts.push(d.modelWidth + '×' + d.modelHeight);
+    if (d.modelColors) parts.push(COLOR_TYPES[d.modelColors] || d.modelColors);
+    return parts.length ? parts.join(' · ') : (d.modelName || '');
+  }
+  // Tasarimin hedef ekrani (sunucu onizlemesini beklemeden gosterilir).
+  function renderSendPanelInfo() {
+    $('sendPanelInfo').innerHTML =
+      '<div class="fw-bold text-truncate"><i class="ti ti-device-tablet me-1 text-secondary"></i>' + e(design.modelName || 'Ekran modeli') + '</div>' +
+      '<div class="small text-secondary">' +
+      '<span class="dz-send-stat">Çözünürlük <b class="mono">' + doc.width + '×' + doc.height + '</b> px</span>' +
+      '<span class="dz-send-stat">Renkler <b>' + e(COLOR_TYPES[doc.colors] || doc.colors) + '</b></span>' +
+      '<span class="dz-send-stat" id="sendRotation"></span></div>';
+  }
   function renderSendDevices() {
     var q = $('sendSearch').value.trim().toLowerCase();
     var list = send.devices.filter(function (d) {
@@ -999,14 +1027,14 @@
     $('sendDevices').innerHTML = list.length ? list.map(function (d) {
       var oldFw = d.gatewayImageReady === false;
       var ok = sendDeviceOk(d) && d.state !== 'disabled' && d.gatewayId && !oldFw;
-      var why = d.state === 'disabled' ? 'Devre dışı' : !d.gatewayId ? 'Gateway atanmamış' : !sendDeviceOk(d) ? 'Farklı ekran: ' + (d.modelName || '')
+      var why = d.state === 'disabled' ? 'Devre dışı' : !d.gatewayId ? 'Gateway atanmamış' : !sendDeviceOk(d) ? 'Farklı ekran: ' + (d.modelName || '') + (d.modelWidth ? ' (' + d.modelWidth + '×' + d.modelHeight + ')' : '')
         : oldFw ? 'Gateway firmware\'i eski (' + d.gatewayFw + '); resim modu için güncellenmeli' : '';
       return '<label class="dz-send-row' + (ok ? '' : ' off') + '" title="' + e(why) + '">' +
         '<input class="form-check-input" type="checkbox" data-serial="' + e(d.serial) + '"' + (send.picked[d.serial] ? ' checked' : '') + (ok ? '' : ' disabled') + '>' +
         '<div class="flex-fill text-truncate"><div><span class="mono fw-bold">' + e(d.serial) + '</span>' + (d.name ? ' <span class="text-secondary">· ' + e(d.name) + '</span>' : '') + '</div>' +
         '<div class="small text-secondary text-truncate">' + (why ? '<span class="text-warning">' + e(why) + '</span>' :
           '<span class="status-dot ' + (d.gatewayOnline ? 'status-dot-animated bg-green' : 'bg-secondary') + ' me-1"></span>' + e(d.gatewayName || '') +
-          (d.modelId ? '' : ' · <span class="text-warning">ekran modeli tanımsız</span>')) + '</div></div></label>';
+          (d.modelId ? ' · <span title="' + e(d.modelName || '') + '">' + e(deviceScreen(d)) + '</span>' : ' · <span class="text-warning">ekran modeli tanımsız</span>')) + '</div></div></label>';
     }).join('') : '<div class="p-3 text-secondary small">' + (send.devices.length ? 'Aramaya uyan cihaz yok.' : 'Kayıtlı cihaz yok. Cihazlar sayfasından ekleyin.') + '</div>';
     var n = Object.keys(send.picked).length;
     $('sendCount').textContent = n ? n + ' cihaz seçili' : 'Cihaz seçin';
@@ -1029,10 +1057,9 @@
       if (my !== send.seq) return;
       $('sendPreview').src = r.png;
       var s = r.stats;
+      if ($('sendRotation')) $('sendRotation').innerHTML = r.rotation ? 'Panel <b class="mono">' + s.width + '×' + s.height + '</b>, ' + r.rotation + '° döndürülür' : '';
       $('sendStats').innerHTML =
-        '<span class="dz-send-stat">Panel <b class="mono">' + s.width + '×' + s.height + '</b></span>' +
-        (r.rotation ? '<span class="dz-send-stat">Döndürme <b>' + r.rotation + '°</b></span>' : '') +
-        '<span class="dz-send-stat">Biçim <b>' + e(s.formatName) + '</b></span><br>' +
+        '<span class="dz-send-stat">Biçim <b>' + e(s.formatName) + '</b></span>' +
         '<span class="dz-send-stat">Veri <b>' + fmtBytes(s.rawBytes) + ' → ' + fmtBytes(s.dataBytes) + '</b>' + (s.compressed ? ' (' + String(s.ratio).replace('.', ',') + 'x)' : '') + '</span>' +
         '<span class="dz-send-stat"><b>' + s.packets.toLocaleString('tr-TR') + '</b> nRF paketi</span>' +
         '<span class="dz-send-stat">≈ <b>' + String(s.estSeconds).replace('.', ',') + ' sn</b> aktarım</span>';
@@ -1055,6 +1082,7 @@
     sendFieldKeys().forEach(function (k) { send.data[k] = data[k] == null ? '' : data[k]; });
     $('sendResult').innerHTML = '';
     $('sendSearch').value = '';
+    renderSendPanelInfo();
     renderSendFields();
     renderSendDevices();
     $('sendPreview').removeAttribute('src');
